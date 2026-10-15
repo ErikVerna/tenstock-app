@@ -88,7 +88,7 @@ Las claves de `firebaseConfig` son públicas por diseño: identifican el proyect
 
 ---
 
-## Cómo funciona el código (para explicarle al equipo)
+## Cómo funciona el código
 
 **Base de datos (Firestore).** Tres colecciones:
 - `insumos`: nombre, categoria, marca, precio, stock, sku.
