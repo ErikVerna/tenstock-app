@@ -64,7 +64,7 @@ input:disabled { background: var(--papel); color: var(--suave); cursor: not-allo
 .login { min-height: 100vh; display: grid; grid-template-columns: 1.1fr 1fr; }
 .login-marca {
   background: var(--tinta); color: var(--papel);
-  padding: 56px; display: flex; flex-direction: column; justify-content: center; gap: 16px;
+  padding: 89px; display: flex; flex-direction: column; justify-content: center; gap: 16px;
 }
 @media (prefers-color-scheme: dark) { .login-marca { background: #0b1015; color: #e8ecea; } }
 .login-marca h1 { font-size: clamp(3rem, 8vw, 5.5rem); font-weight: 700; letter-spacing: -.03em; }
@@ -128,4 +128,16 @@ small { color: var(--suave); }
   .login-marca { padding: 32px 24px; }
   .login-form { padding: 32px 0; }
   main { padding: 16px; }
+}
+
+.logo-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.logo {
+    width: 350px;
+    height: 350px;
+    object-fit: contain;
 }
