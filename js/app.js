@@ -227,9 +227,18 @@ function abrirVenta(insumo) {
 
 $("#form-venta").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const form = $("#form-venta");
   const cantidad = Number($("#venta-cantidad").value);
   const error = $("#venta-error");
   if (!Number.isInteger(cantidad) || cantidad < 1) { error.textContent = "Ingresá una cantidad válida."; return; }
+  const controles = [...form.querySelectorAll("button, input")];
+  const estadosPrevios = controles.map((control) => control.disabled);
+  const botonEnviar = form.querySelector('button[type="submit"]');
+  const textoBoton = botonEnviar.textContent;
+  error.textContent = "";
+  form.setAttribute("aria-busy", "true");
+  controles.forEach((control) => (control.disabled = true));
+  botonEnviar.textContent = "Procesando venta…";
   try {
     // La transacción lee el stock real y lo descuenta en un solo paso:
     // dos empleados vendiendo lo mismo a la vez no pueden dejar stock negativo.
@@ -247,6 +256,10 @@ $("#form-venta").addEventListener("submit", async (e) => {
     $("#dlg-venta").close();
   } catch (err) {
     error.textContent = err.message.startsWith("Stock") ? err.message : "No se pudo registrar la venta.";
+  } finally {
+    controles.forEach((control, indice) => (control.disabled = estadosPrevios[indice]));
+    botonEnviar.textContent = textoBoton;
+    form.removeAttribute("aria-busy");
   }
 });
 
