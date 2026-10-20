@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc,
-  deleteDoc, onSnapshot, runTransaction, query, where, limit, serverTimestamp
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc,
+  deleteDoc, onSnapshot, runTransaction, writeBatch, query, where, orderBy, limit, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -14,28 +14,51 @@ const CATEGORIAS = [
   "Hardware / Almacenamiento", "Hardware / Motherboards", "Hardware / Fuentes y gabinetes",
   "Periféricos", "Redes", "Notebooks", "Monitores", "Otros"
 ];
-const CAMPOS = ["nombre", "categoria", "marca", "precio", "sku", "stock"];
+// Campos que se pueden modificar a mano. El stock NO está acá: solo cambia con
+// movimientos (venta, entrada, devolución), así siempre queda registro.
+const CAMPOS_EDITABLES = ["nombre", "categoria", "marca", "precio", "sku"];
 const STOCK_BAJO = 5;
+const MOTIVOS_BAJA = {
+  fuera_de_comercializacion: "Fuera de comercialización",
+  rotura: "Rotura",
+  garantia: "Garantía / devolución a proveedor",
+  otro: "Otro"
+};
+const TIPOS_MOVIMIENTO = {
+  alta: "Alta", salida: "Venta", reposicion: "Reposición", devolucion: "Devolución",
+  baja: "Desactivación comercial", baja_stock: "Baja de stock", reactivacion: "Reactivación"
+};
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const pesos = (n) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n);
+
+// Error de regla de negocio: su mensaje se le muestra tal cual al usuario.
+class ReglaError extends Error {}
 
 async function sha256(texto) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+const soloEditables = (permisos) => (permisos || []).filter((p) => CAMPOS_EDITABLES.includes(p));
+
 let sesion = JSON.parse(sessionStorage.getItem("sesion") || "null");
+if (sesion) sesion.permisos = soloEditables(sesion.permisos);
 let insumos = [];
 let usuarios = [];
 let desuscribir = [];
 let insumoEditandoId = null;
+let insumoOriginal = null;
 let ventaInsumoId = null;
+let entradaInsumoId = null;
+let bajaInsumoId = null;
+let movimientos = [];
 let usuarioEditando = null;
 
 const esAdmin = () => sesion?.rol === "admin";
 const puedeEditarCampo = (campo) => esAdmin() || sesion.permisos.includes(campo);
+const estaActivo = (i) => i.activo !== false;   // los insumos viejos no tienen el campo: cuentan como activos
 
 /* ================= Usuarios precargados ================= */
 async function precargarUsuarios() {
@@ -43,11 +66,11 @@ async function precargarUsuarios() {
   if (!snap.empty) return;
   await setDoc(doc(db, "usuarios", "admin"), {
     usuario: "admin", rol: "admin", activo: true,
-    passHash: await sha256("admin123"), permisos: [...CAMPOS]
+    passHash: await sha256("admin123"), permisos: [...CAMPOS_EDITABLES]
   });
   await setDoc(doc(db, "usuarios", "empleado"), {
     usuario: "empleado", rol: "usuario", activo: true,
-    passHash: await sha256("empleado123"), permisos: ["stock"]
+    passHash: await sha256("empleado123"), permisos: []
   });
 }
 
@@ -65,7 +88,7 @@ $("#form-login").addEventListener("submit", async (e) => {
       error.textContent = "Usuario o contraseña incorrectos.";
       return;
     }
-    sesion = { usuario: d.usuario, rol: d.rol, permisos: d.permisos || [] };
+    sesion = { usuario: d.usuario, rol: d.rol, permisos: soloEditables(d.permisos) };
     sessionStorage.setItem("sesion", JSON.stringify(sesion));
     iniciarApp();
   } catch (err) {
@@ -89,6 +112,8 @@ function iniciarApp() {
   $("#vista-app").hidden = false;
   $("#sesion-info").textContent = `${sesion.usuario} · ${esAdmin() ? "Administrador" : "Usuario"}`;
   $("#tab-usuarios").hidden = !esAdmin();
+  $("#tab-movimientos").hidden = !esAdmin();
+  $("#wrap-ver-bajas").hidden = !esAdmin();
   $("#btn-nuevo-insumo").hidden = !esAdmin();
   mostrarPanel("panel-insumos");
 
@@ -104,6 +129,10 @@ function iniciarApp() {
       usuarios = snap.docs.map((d) => d.data()).sort((a, b) => a.usuario.localeCompare(b.usuario));
       renderUsuarios();
     }));
+    desuscribir.push(onSnapshot(
+      query(collection(db, "movimientos"), orderBy("fecha", "desc")),
+      (snap) => { movimientos = snap.docs.map((d) => d.data()); renderMovimientos(); }
+    ));
   }
 }
 
@@ -122,38 +151,56 @@ CATEGORIAS.forEach((c) => {
 });
 $("#buscar").addEventListener("input", renderInsumos);
 $("#filtro-categoria").addEventListener("change", renderInsumos);
+$("#ver-bajas").addEventListener("change", renderInsumos);
 
 function renderInsumos() {
+  if (!sesion) return;
   const texto = $("#buscar").value.trim().toLowerCase();
   const cat = $("#filtro-categoria").value;
-  const lista = insumos.filter((i) =>
+  const verBajas = esAdmin() && $("#ver-bajas").checked;
+  const visibles = insumos.filter((i) => verBajas || estaActivo(i));
+  const lista = visibles.filter((i) =>
     (!cat || i.categoria === cat) &&
     (!texto || [i.nombre, i.marca, i.sku].some((v) => v.toLowerCase().includes(texto))));
 
   const puedeModificar = esAdmin() || sesion.permisos.length > 0;
   $("#tbody-insumos").innerHTML = lista.length ? lista.map((i) => {
+    if (!estaActivo(i)) {
+      return `<tr class="fila-baja">
+        <td>${esc(i.nombre)}<br><small>Baja: ${esc(MOTIVOS_BAJA[i.motivoBaja] ?? "sin motivo")}</small></td>
+        <td>${esc(i.categoria)}</td><td>${esc(i.marca)}</td>
+        <td><small>${esc(i.sku)}</small></td>
+        <td class="num">${pesos(i.precio)}</td>
+        <td class="num">${i.stock}</td>
+        <td><button class="btn btn-texto" data-accion="reactivar" data-id="${i.id}">Reactivar</button></td></tr>`;
+    }
     const clase = i.stock === 0 ? "stock-cero" : i.stock <= STOCK_BAJO ? "stock-bajo" : "stock-ok";
+    const sinStock = i.stock === 0 ? ` <span class="etiqueta etiqueta-cero">Sin stock</span>` : "";
     return `<tr>
       <td>${esc(i.nombre)}</td><td>${esc(i.categoria)}</td><td>${esc(i.marca)}</td>
       <td><small>${esc(i.sku)}</small></td>
       <td class="num">${pesos(i.precio)}</td>
-      <td class="num ${clase}">${i.stock}</td>
+      <td class="num ${clase}">${sinStock} ${i.stock}</td>
       <td>
         <button class="btn btn-texto" data-accion="vender" data-id="${i.id}" ${i.stock === 0 ? "disabled" : ""}>Vender</button>
+        <button class="btn btn-texto" data-accion="entrada" data-id="${i.id}">Entrada</button>
         ${puedeModificar ? `<button class="btn btn-texto" data-accion="editar" data-id="${i.id}">Editar</button>` : ""}
         ${esAdmin() ? `<button class="btn btn-texto btn-peligro" data-accion="baja" data-id="${i.id}">Dar de baja</button>` : ""}
       </td></tr>`;
   }).join("") : `<tr><td colspan="7" class="vacio">No hay insumos que coincidan con la búsqueda.</td></tr>`;
-  $("#msg-insumos").textContent = `${lista.length} de ${insumos.length} insumos`;
+  $("#msg-insumos").textContent = `${lista.length} de ${visibles.length} insumos`;
 }
 
 $("#tbody-insumos").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-accion]");
   if (!b) return;
   const insumo = insumos.find((i) => i.id === b.dataset.id);
+  if (!insumo) return;
   if (b.dataset.accion === "editar") abrirInsumo(insumo);
   if (b.dataset.accion === "vender") abrirVenta(insumo);
-  if (b.dataset.accion === "baja") darDeBaja(insumo);
+  if (b.dataset.accion === "entrada") abrirEntrada(insumo);
+  if (b.dataset.accion === "baja") abrirBaja(insumo);
+  if (b.dataset.accion === "reactivar") reactivar(insumo);
 });
 
 /* ================= INSUMOS: alta y modificación ================= */
@@ -161,14 +208,21 @@ $("#btn-nuevo-insumo").addEventListener("click", () => abrirInsumo(null));
 
 function abrirInsumo(insumo) {
   insumoEditandoId = insumo?.id ?? null;
+  insumoOriginal = insumo ? { ...insumo } : null;
   $("#dlg-insumo-titulo").textContent = insumo ? "Modificar insumo" : "Agregar insumo";
   $("#form-insumo").reset();
   $("#insumo-error").textContent = "";
-  CAMPOS.forEach((c) => {
+  CAMPOS_EDITABLES.forEach((c) => {
     const input = $("#f-" + c);
     input.value = insumo ? insumo[c] : "";
     input.disabled = !puedeEditarCampo(c);   // el usuario solo toca lo que el admin permitió
   });
+  // El stock solo se carga al dar de alta; después cambia con ventas y entradas.
+  $("#f-stock").value = insumo ? insumo.stock : "";
+  $("#f-stock").disabled = !!insumo;
+  $("#f-stock-ayuda").textContent = insumo
+    ? "El stock no se edita acá: usá Vender o Entrada para que quede registrado."
+    : "Se registra como movimiento de alta. Si después llega más mercadería, usá Entrada.";
   $("#dlg-insumo").showModal();
 }
 
@@ -181,12 +235,14 @@ $("#form-insumo").addEventListener("submit", async (e) => {
     categoria: $("#f-categoria").value,
     marca: $("#f-marca").value.trim(),
     sku: $("#f-sku").value.trim().toUpperCase(),
-    precio: Number($("#f-precio").value),
-    stock: Number($("#f-stock").value)
+    precio: Number($("#f-precio").value)
   };
   if (!datos.nombre || !datos.marca || !datos.sku) { error.textContent = "Completá nombre, marca y SKU."; return; }
   if (!Number.isFinite(datos.precio) || datos.precio < 0) { error.textContent = "El precio debe ser un número mayor o igual a 0."; return; }
-  if (!Number.isInteger(datos.stock) || datos.stock < 0) { error.textContent = "El stock debe ser un entero mayor o igual a 0."; return; }
+  const stockInicial = Number($("#f-stock").value);
+  if (!insumoEditandoId && (!Number.isInteger(stockInicial) || stockInicial < 0)) {
+    error.textContent = "El stock inicial debe ser un entero mayor o igual a 0."; return;
+  }
 
   try {
     const repetido = await getDocs(query(collection(db, "insumos"), where("sku", "==", datos.sku)));
@@ -195,11 +251,18 @@ $("#form-insumo").addEventListener("submit", async (e) => {
       return;
     }
     if (insumoEditandoId) {
+      // Solo se escriben los campos que cambiaron: así editar un precio nunca pisa el stock.
       const cambios = {};
-      CAMPOS.filter(puedeEditarCampo).forEach((c) => (cambios[c] = datos[c]));
-      await updateDoc(doc(db, "insumos", insumoEditandoId), cambios);
+      CAMPOS_EDITABLES.filter(puedeEditarCampo).forEach((c) => {
+        if (datos[c] !== insumoOriginal[c]) cambios[c] = datos[c];
+      });
+      if (Object.keys(cambios).length) await updateDoc(doc(db, "insumos", insumoEditandoId), cambios);
     } else {
-      await addDoc(collection(db, "insumos"), datos);
+      const ref = doc(collection(db, "insumos"));
+      const batch = writeBatch(db);
+      batch.set(ref, { ...datos, stock: stockInicial, activo: true });
+      batch.set(doc(collection(db, "movimientos")), movimiento(ref.id, datos, "alta", stockInicial, stockInicial, "Alta de producto"));
+      await batch.commit();
     }
     $("#dlg-insumo").close();
   } catch (err) {
@@ -208,12 +271,50 @@ $("#form-insumo").addEventListener("submit", async (e) => {
   }
 });
 
-/* ================= INSUMOS: baja ================= */
-async function darDeBaja(insumo) {
-  if (!confirm(`¿Dar de baja "${insumo.nombre}"? Deja de comercializarse y se elimina del listado.`)) return;
-  try { await deleteDoc(doc(db, "insumos", insumo.id)); }
-  catch { alert("No se pudo dar de baja el insumo."); }
+/* ================= MOVIMIENTOS de stock (todos pasan por acá) ================= */
+function movimiento(insumoId, insumo, tipo, cantidad, stockResultante, detalle = "") {
+  return {
+    insumoId, insumo: insumo.nombre, sku: insumo.sku, tipo, cantidad, stockResultante, detalle,
+    usuario: sesion.usuario, fecha: serverTimestamp()
+  };
 }
+
+// Cambia el stock y registra el movimiento en UNA sola transacción:
+// no puede quedar un descuento sin registro (ni al revés), y dos usuarios
+// operando el mismo producto a la vez no pueden dejar el stock negativo.
+async function moverStock(insumoId, tipo, cantidad, detalle = "") {
+  if (!Number.isInteger(cantidad) || cantidad < 1) throw new ReglaError("La cantidad debe ser un entero mayor que cero.");
+  await runTransaction(db, async (tx) => {
+    const ref = doc(db, "insumos", insumoId);
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new ReglaError("El insumo ya no existe.");
+    const ins = snap.data();
+    if (!estaActivo(ins)) throw new ReglaError("El insumo está dado de baja.");
+    const nuevo = tipo === "salida" || tipo === "baja_stock" ? ins.stock - cantidad : ins.stock + cantidad;
+    if (nuevo < 0) throw new ReglaError(`Stock insuficiente: quedan ${ins.stock} unidades.`);
+    tx.update(ref, { stock: nuevo });
+    tx.set(doc(collection(db, "movimientos")), movimiento(insumoId, ins, tipo, cantidad, nuevo, detalle));
+  });
+}
+
+// Deshabilita el formulario mientras se procesa, para evitar doble envío.
+async function conEspera(form, textoEspera, tarea) {
+  const controles = [...form.querySelectorAll("button, input, select")];
+  const estadosPrevios = controles.map((control) => control.disabled);
+  const botonEnviar = form.querySelector('button[type="submit"]');
+  const textoBoton = botonEnviar.textContent;
+  form.setAttribute("aria-busy", "true");
+  controles.forEach((control) => (control.disabled = true));
+  botonEnviar.textContent = textoEspera;
+  try { await tarea(); }
+  finally {
+    controles.forEach((control, indice) => (control.disabled = estadosPrevios[indice]));
+    botonEnviar.textContent = textoBoton;
+    form.removeAttribute("aria-busy");
+  }
+}
+
+const mensajeDe = (err, porDefecto) => (err instanceof ReglaError ? err.message : porDefecto);
 
 /* ================= VENTAS (salida de stock) ================= */
 function abrirVenta(insumo) {
@@ -227,48 +328,151 @@ function abrirVenta(insumo) {
 
 $("#form-venta").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const form = $("#form-venta");
   const cantidad = Number($("#venta-cantidad").value);
   const error = $("#venta-error");
   if (!Number.isInteger(cantidad) || cantidad < 1) { error.textContent = "Ingresá una cantidad válida."; return; }
-  const controles = [...form.querySelectorAll("button, input")];
-  const estadosPrevios = controles.map((control) => control.disabled);
-  const botonEnviar = form.querySelector('button[type="submit"]');
-  const textoBoton = botonEnviar.textContent;
   error.textContent = "";
-  form.setAttribute("aria-busy", "true");
-  controles.forEach((control) => (control.disabled = true));
-  botonEnviar.textContent = "Procesando venta…";
   try {
-    // La transacción lee el stock real y lo descuenta en un solo paso:
-    // dos empleados vendiendo lo mismo a la vez no pueden dejar stock negativo.
-    await runTransaction(db, async (tx) => {
-      const ref = doc(db, "insumos", ventaInsumoId);
-      const snap = await tx.get(ref);
-      const stock = snap.data().stock;
-      if (cantidad > stock) throw new Error(`Stock insuficiente: quedan ${stock} unidades.`);
-      tx.update(ref, { stock: stock - cantidad });
-    });
-    await addDoc(collection(db, "movimientos"), {
-      insumoId: ventaInsumoId, tipo: "salida", cantidad,
-      usuario: sesion.usuario, fecha: serverTimestamp()
-    });
+    await conEspera($("#form-venta"), "Procesando venta…", () => moverStock(ventaInsumoId, "salida", cantidad));
     $("#dlg-venta").close();
   } catch (err) {
-    error.textContent = err.message.startsWith("Stock") ? err.message : "No se pudo registrar la venta.";
-  } finally {
-    controles.forEach((control, indice) => (control.disabled = estadosPrevios[indice]));
-    botonEnviar.textContent = textoBoton;
-    form.removeAttribute("aria-busy");
+    console.error(err);
+    error.textContent = mensajeDe(err, "No se pudo registrar la venta.");
   }
 });
+
+/* ================= ENTRADAS de stock (reposición y devolución) ================= */
+function abrirEntrada(insumo) {
+  entradaInsumoId = insumo.id;
+  $("#entrada-detalle").textContent = `${insumo.nombre} · stock actual: ${insumo.stock}`;
+  $("#entrada-tipo").value = "reposicion";
+  $("#entrada-cantidad").value = 1;
+  $("#entrada-nota").value = "";
+  $("#entrada-error").textContent = "";
+  $("#dlg-entrada").showModal();
+}
+
+$("#form-entrada").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const cantidad = Number($("#entrada-cantidad").value);
+  const error = $("#entrada-error");
+  if (!Number.isInteger(cantidad) || cantidad < 1) { error.textContent = "Ingresá una cantidad válida."; return; }
+  error.textContent = "";
+  try {
+    await conEspera($("#form-entrada"), "Registrando…", () =>
+      moverStock(entradaInsumoId, $("#entrada-tipo").value, cantidad, $("#entrada-nota").value.trim()));
+    $("#dlg-entrada").close();
+  } catch (err) {
+    console.error(err);
+    error.textContent = mensajeDe(err, "No se pudo registrar la entrada.");
+  }
+});
+
+/* ================= BAJAS: stock defectuoso vs. desactivación comercial ================= */
+function abrirBaja(insumo) {
+  bajaInsumoId = insumo.id;
+  $("#baja-detalle").textContent = `${insumo.nombre} · stock actual: ${insumo.stock}`;
+  $("#baja-operacion").value = "stock";
+  $("#baja-cantidad").value = 1;
+  $("#baja-cantidad").max = insumo.stock;
+  $("#baja-motivo").value = "rotura";
+  $("#baja-error").textContent = "";
+  actualizarFormularioBaja();
+  $("#dlg-baja").showModal();
+}
+
+function actualizarFormularioBaja() {
+  const esStock = $("#baja-operacion").value === "stock";
+  $("#baja-cantidad-wrap").hidden = !esStock;
+  $("#baja-motivo-wrap").hidden = !esStock;
+  $("#baja-ayuda").textContent = esStock
+    ? "Descuenta las unidades dañadas y conserva el producto activo."
+    : "Solo se permite si el stock es cero y el producto se retira de comercialización.";
+  $("#baja-submit").textContent = esStock ? "Registrar baja de stock" : "Desactivar producto";
+}
+$("#baja-operacion").addEventListener("change", actualizarFormularioBaja);
+
+async function cambiarEstado(insumoId, activo, motivo) {
+  await runTransaction(db, async (tx) => {
+    const ref = doc(db, "insumos", insumoId);
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new ReglaError("El insumo ya no existe.");
+    const ins = snap.data();
+    if (!activo && ins.stock !== 0) throw new ReglaError("Para retirar un producto de comercialización, primero debe quedar sin stock.");
+    tx.update(ref, activo
+      ? { activo: true, motivoBaja: null, fechaBaja: null }
+      : { activo: false, motivoBaja: motivo, fechaBaja: serverTimestamp() });
+    tx.set(doc(collection(db, "movimientos")), movimiento(
+      insumoId, ins, activo ? "reactivacion" : "baja", 0, ins.stock,
+      activo ? "Reactivado" : MOTIVOS_BAJA[motivo]));
+  });
+}
+
+$("#form-baja").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const error = $("#baja-error");
+  error.textContent = "";
+  const operacion = $("#baja-operacion").value;
+  const cantidad = Number($("#baja-cantidad").value);
+  const motivo = $("#baja-motivo").value;
+  if (operacion === "stock" && (!Number.isInteger(cantidad) || cantidad < 1)) {
+    error.textContent = "Ingresá una cantidad entera mayor que cero."; return;
+  }
+  try {
+    await conEspera($("#form-baja"), "Procesando…", async () => {
+      if (operacion === "stock") {
+        await moverStock(bajaInsumoId, "baja_stock", cantidad, MOTIVOS_BAJA[motivo] || motivo);
+      } else {
+        await cambiarEstado(bajaInsumoId, false, "fuera_de_comercializacion");
+      }
+    });
+    $("#dlg-baja").close();
+  } catch (err) {
+    console.error(err);
+    error.textContent = mensajeDe(err, "No se pudo procesar la baja.");
+  }
+});
+
+async function reactivar(insumo) {
+  if (!confirm(`¿Reactivar "${insumo.nombre}"? Vuelve al listado con su stock actual (${insumo.stock}).`)) return;
+  try { await cambiarEstado(insumo.id, true); }
+  catch (err) { console.error(err); alert(mensajeDe(err, "No se pudo reactivar el insumo.")); }
+}
+
+/* ================= MOVIMIENTOS: historial (solo administrador) ================= */
+function renderMovimientos() {
+  const dia = $("#filtro-movimientos-dia").value;
+  const lista = movimientos.filter((m) => {
+    if (!dia) return true;
+    const fecha = m.fecha?.toDate?.();
+    if (!fecha) return false;
+    const yyyy = fecha.getFullYear();
+    const mm = String(fecha.getMonth() + 1).padStart(2, "0");
+    const dd = String(fecha.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}` === dia;
+  });
+  $("#tbody-movimientos").innerHTML = lista.length ? lista.map((m) => {
+    const fecha = m.fecha?.toDate?.().toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) ?? "—";
+    const signo = m.tipo === "salida" || m.tipo === "baja_stock" ? "−" : m.tipo === "baja" || m.tipo === "reactivacion" ? "" : "+";
+    return `<tr>
+      <td><small>${esc(fecha)}</small></td>
+      <td class="mov-${esc(m.tipo)}">${esc(TIPOS_MOVIMIENTO[m.tipo] ?? m.tipo)}</td>
+      <td>${esc(m.insumo)}<br><small>${esc(m.sku)}</small></td>
+      <td class="num">${signo}${m.cantidad}</td>
+      <td class="num">${m.stockResultante}</td>
+      <td>${esc(m.usuario)}</td>
+      <td><small>${esc(m.detalle)}</small></td></tr>`;
+  }).join("") : `<tr><td colspan="7" class="vacio">No hay movimientos para la fecha seleccionada.</td></tr>`;
+}
+$("#filtro-movimientos-dia").addEventListener("change", renderMovimientos);
+$("#limpiar-filtro-movimientos").addEventListener("click", () => { $("#filtro-movimientos-dia").value = ""; renderMovimientos(); });
 
 /* ================= USUARIOS (solo administrador) ================= */
 function renderUsuarios() {
   $("#tbody-usuarios").innerHTML = usuarios.map((u) => `<tr>
     <td>${esc(u.usuario)}</td>
     <td>${u.rol === "admin" ? "Administrador" : "Usuario"}</td>
-    <td>${u.rol === "admin" ? "Todos" : esc(u.permisos.join(", ") || "Solo consulta y ventas")}</td>
+    <td>${u.rol === "admin" ? "Todos" : esc(soloEditables(u.permisos).join(", ") || "Ninguno (consulta, ventas y entradas)")}</td>
     <td>${u.activo ? "Activo" : "Inactivo"}</td>
     <td>
       <button class="btn btn-texto" data-accion="editar" data-id="${esc(u.usuario)}">Editar</button>
@@ -310,7 +514,7 @@ $("#form-usuario").addEventListener("submit", async (e) => {
   const nombre = $("#u-usuario").value.trim().toLowerCase();
   const pass = $("#u-pass").value;
   const rol = $("#u-rol").value;
-  const permisos = rol === "admin" ? [...CAMPOS]
+  const permisos = rol === "admin" ? [...CAMPOS_EDITABLES]
     : [...document.querySelectorAll("#u-permisos input:checked")].map((c) => c.value);
   try {
     const ref = doc(db, "usuarios", nombre);
