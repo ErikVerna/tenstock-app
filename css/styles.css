@@ -4,7 +4,7 @@
   --panel: #ffffff;
   --linea: #d6dbd3;
   --suave: #5d6a75;
-  --acento: #0e6b5c;
+  --acento: #1c1c98;
   --acento-osc: #0a5246;
   --alerta: #b4540a;
   --peligro: #b3261e;
@@ -17,8 +17,8 @@
     --panel: #1a222b;
     --linea: #2f3a45;
     --suave: #9aa7b2;
-    --acento: #3fb59f;
-    --acento-osc: #5fcab5;
+    --acento: #3a7cb1;
+    --acento-osc: #2d4a5e;
     --alerta: #e08a45;
     --peligro: #f0766e;
   }

@@ -49,7 +49,9 @@ Los permisos de modificación de datos son **configurables**: el admin los tilda
 - **Venta.** Descuenta el stock en el momento. Si la cantidad pedida es mayor al stock disponible, **la venta se bloquea** con el mensaje "Stock insuficiente". Con stock 0 el botón *Vender* queda deshabilitado y la fila muestra "Sin stock".
 - **Devolución.** Es una entrada con motivo "Devolución": suma al stock del mismo producto, no crea uno nuevo. La puede registrar el vendedor en el mostrador, sin depender del administrador.
 - **Caso "última unidad".** Se vende la última unidad (stock 0, "Sin stock") → el cliente la devuelve → el empleado registra una Entrada por devolución (stock 1) → el siguiente cliente ya puede comprarla. Todo queda en el historial.
-- **Baja.** Es lógica: el producto queda inactivo con un motivo (fuera de comercialización, rotura, garantía u otro). No se vende ni aparece en el listado, pero conserva su historial y el admin puede reactivarlo (*Ver dados de baja*).
+- **Baja de stock defectuoso.** Descuenta la cantidad rota/defectuosa, registra el movimiento y mantiene activo el producto. Se puede descontar una unidad o un lote completo; no se permite dejar stock negativo.
+- **Retiro de comercialización.** Es una operación separada y solo se permite cuando el stock está en cero. Desactiva el producto sin borrar su historial. El administrador puede reactivarlo desde *Ver dados de baja*.
+- **Historial.** El administrador puede filtrar los movimientos por un día específico o volver a ver todos.
 - **El stock no se edita a mano.** Solo cambia por movimientos (alta, venta, reposición, devolución), así cada cambio queda registrado con usuario y fecha.
 
 ---
@@ -121,7 +123,7 @@ Las claves de `firebaseConfig` son públicas por diseño: identifican el proyect
 **Base de datos (Firestore).** Tres colecciones:
 - `insumos`: nombre, categoria, marca, precio, stock, sku, activo, motivoBaja, fechaBaja. Los documentos viejos sin el campo `activo` cuentan como activos.
 - `usuarios`: usuario, rol, activo, passHash, permisos (lista de campos editables).
-- `movimientos`: historial de todo cambio de stock (alta, venta, reposición, devolución, baja, reactivación) con insumo, cantidad, stock resultante, usuario y fecha.
+- `movimientos`: historial de todo cambio de stock (alta, venta, reposición, devolución, baja, reactivación) con insumo, cantidad, stock resultante, usuario y fecha. La baja de stock defectuoso se registra como `baja_stock`; la desactivación comercial se registra como `baja`.
 
 **Login.** Busca el documento `usuarios/{usuario}`, compara el hash SHA-256 de la contraseña ingresada con el guardado, y guarda el perfil en `sessionStorage`. Las contraseñas nunca se guardan en texto plano.
 
@@ -162,4 +164,4 @@ Utilizamos Claude (Anthropic) como asistente durante el desarrollo. Le entregamo
 - **Alta masiva:** como el administrador carga mercadería una vez por semana, se podría agregar importación desde CSV.
 - **Alertas:** hoy el color marca stock bajo (≤ 5, fijo en el código); se podría avisar automáticamente con un mínimo configurable por producto.
 - **Venta con varios productos:** hoy cada venta es de un solo producto; un carrito/ticket con varios ítems sería una mejora.
-- **Historial:** la pestaña *Movimientos* muestra los últimos 50; se podría paginar o filtrar por fecha, producto o usuario.
+- **Historial:** el filtro por día está implementado. Para instalaciones con un volumen grande de movimientos, conviene agregar paginación y hacer el filtro de fecha desde la consulta de Firestore.

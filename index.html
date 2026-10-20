@@ -70,7 +70,9 @@
       <!-- MOVIMIENTOS (solo admin) -->
       <section id="panel-movimientos" class="panel" hidden>
         <div class="herramientas">
-          <h2>Últimos movimientos de stock</h2>
+          <h2>Historial de movimientos</h2>
+          <label>Filtrar por día <input id="filtro-movimientos-dia" type="date"></label>
+          <button id="limpiar-filtro-movimientos" type="button" class="btn btn-texto">Ver todos</button>
         </div>
         <div class="tabla-wrap">
           <table>
@@ -154,19 +156,27 @@
     <form id="form-baja" method="dialog">
       <h2>Dar de baja</h2>
       <p id="baja-detalle"></p>
-      <label>Motivo
+      <label>Operación
+        <select id="baja-operacion">
+          <option value="stock">Descontar stock roto/defectuoso</option>
+          <option value="desactivar">Retirar de comercialización</option>
+        </select>
+      </label>
+      <label id="baja-cantidad-wrap">Cantidad defectuosa
+        <input id="baja-cantidad" type="number" min="1" step="1" value="1" required>
+      </label>
+      <label id="baja-motivo-wrap">Motivo
         <select id="baja-motivo">
-          <option value="fuera_de_comercializacion">Fuera de comercialización</option>
           <option value="rotura">Rotura</option>
           <option value="garantia">Garantía / devolución a proveedor</option>
           <option value="otro">Otro</option>
         </select>
       </label>
-      <small>El insumo queda inactivo: no se vende ni se lista, pero se conserva su historial y se puede reactivar.</small>
+      <small id="baja-ayuda">Descuenta las unidades dañadas y conserva el producto activo.</small>
       <p id="baja-error" class="error" role="alert"></p>
       <div class="acciones-dlg">
         <button type="button" class="btn btn-texto" data-cerrar>Cancelar</button>
-        <button type="submit" class="btn btn-primario btn-baja">Confirmar baja</button>
+        <button id="baja-submit" type="submit" class="btn btn-primario btn-baja">Registrar baja de stock</button>
       </div>
     </form>
   </dialog>

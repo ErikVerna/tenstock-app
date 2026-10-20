@@ -26,7 +26,7 @@ const MOTIVOS_BAJA = {
 };
 const TIPOS_MOVIMIENTO = {
   alta: "Alta", salida: "Venta", reposicion: "Reposición", devolucion: "Devolución",
-  baja: "Baja", reactivacion: "Reactivación"
+  baja: "Desactivación comercial", baja_stock: "Baja de stock", reactivacion: "Reactivación"
 };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
@@ -53,6 +53,7 @@ let insumoOriginal = null;
 let ventaInsumoId = null;
 let entradaInsumoId = null;
 let bajaInsumoId = null;
+let movimientos = [];
 let usuarioEditando = null;
 
 const esAdmin = () => sesion?.rol === "admin";
@@ -129,8 +130,8 @@ function iniciarApp() {
       renderUsuarios();
     }));
     desuscribir.push(onSnapshot(
-      query(collection(db, "movimientos"), orderBy("fecha", "desc"), limit(50)),
-      (snap) => renderMovimientos(snap.docs.map((d) => d.data()))
+      query(collection(db, "movimientos"), orderBy("fecha", "desc")),
+      (snap) => { movimientos = snap.docs.map((d) => d.data()); renderMovimientos(); }
     ));
   }
 }
@@ -282,13 +283,14 @@ function movimiento(insumoId, insumo, tipo, cantidad, stockResultante, detalle =
 // no puede quedar un descuento sin registro (ni al revés), y dos usuarios
 // operando el mismo producto a la vez no pueden dejar el stock negativo.
 async function moverStock(insumoId, tipo, cantidad, detalle = "") {
+  if (!Number.isInteger(cantidad) || cantidad < 1) throw new ReglaError("La cantidad debe ser un entero mayor que cero.");
   await runTransaction(db, async (tx) => {
     const ref = doc(db, "insumos", insumoId);
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new ReglaError("El insumo ya no existe.");
     const ins = snap.data();
     if (!estaActivo(ins)) throw new ReglaError("El insumo está dado de baja.");
-    const nuevo = tipo === "salida" ? ins.stock - cantidad : ins.stock + cantidad;
+    const nuevo = tipo === "salida" || tipo === "baja_stock" ? ins.stock - cantidad : ins.stock + cantidad;
     if (nuevo < 0) throw new ReglaError(`Stock insuficiente: quedan ${ins.stock} unidades.`);
     tx.update(ref, { stock: nuevo });
     tx.set(doc(collection(db, "movimientos")), movimiento(insumoId, ins, tipo, cantidad, nuevo, detalle));
@@ -366,14 +368,29 @@ $("#form-entrada").addEventListener("submit", async (e) => {
   }
 });
 
-/* ================= INSUMOS: baja lógica (solo administrador) ================= */
+/* ================= BAJAS: stock defectuoso vs. desactivación comercial ================= */
 function abrirBaja(insumo) {
   bajaInsumoId = insumo.id;
   $("#baja-detalle").textContent = `${insumo.nombre} · stock actual: ${insumo.stock}`;
-  $("#baja-motivo").value = "fuera_de_comercializacion";
+  $("#baja-operacion").value = "stock";
+  $("#baja-cantidad").value = 1;
+  $("#baja-cantidad").max = insumo.stock;
+  $("#baja-motivo").value = "rotura";
   $("#baja-error").textContent = "";
+  actualizarFormularioBaja();
   $("#dlg-baja").showModal();
 }
+
+function actualizarFormularioBaja() {
+  const esStock = $("#baja-operacion").value === "stock";
+  $("#baja-cantidad-wrap").hidden = !esStock;
+  $("#baja-motivo-wrap").hidden = !esStock;
+  $("#baja-ayuda").textContent = esStock
+    ? "Descuenta las unidades dañadas y conserva el producto activo."
+    : "Solo se permite si el stock es cero y el producto se retira de comercialización.";
+  $("#baja-submit").textContent = esStock ? "Registrar baja de stock" : "Desactivar producto";
+}
+$("#baja-operacion").addEventListener("change", actualizarFormularioBaja);
 
 async function cambiarEstado(insumoId, activo, motivo) {
   await runTransaction(db, async (tx) => {
@@ -381,11 +398,12 @@ async function cambiarEstado(insumoId, activo, motivo) {
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new ReglaError("El insumo ya no existe.");
     const ins = snap.data();
+    if (!activo && ins.stock !== 0) throw new ReglaError("Para retirar un producto de comercialización, primero debe quedar sin stock.");
     tx.update(ref, activo
       ? { activo: true, motivoBaja: null, fechaBaja: null }
       : { activo: false, motivoBaja: motivo, fechaBaja: serverTimestamp() });
     tx.set(doc(collection(db, "movimientos")), movimiento(
-      insumoId, ins, activo ? "reactivacion" : "baja", ins.stock, ins.stock,
+      insumoId, ins, activo ? "reactivacion" : "baja", 0, ins.stock,
       activo ? "Reactivado" : MOTIVOS_BAJA[motivo]));
   });
 }
@@ -394,12 +412,24 @@ $("#form-baja").addEventListener("submit", async (e) => {
   e.preventDefault();
   const error = $("#baja-error");
   error.textContent = "";
+  const operacion = $("#baja-operacion").value;
+  const cantidad = Number($("#baja-cantidad").value);
+  const motivo = $("#baja-motivo").value;
+  if (operacion === "stock" && (!Number.isInteger(cantidad) || cantidad < 1)) {
+    error.textContent = "Ingresá una cantidad entera mayor que cero."; return;
+  }
   try {
-    await conEspera($("#form-baja"), "Procesando…", () => cambiarEstado(bajaInsumoId, false, $("#baja-motivo").value));
+    await conEspera($("#form-baja"), "Procesando…", async () => {
+      if (operacion === "stock") {
+        await moverStock(bajaInsumoId, "baja_stock", cantidad, MOTIVOS_BAJA[motivo] || motivo);
+      } else {
+        await cambiarEstado(bajaInsumoId, false, "fuera_de_comercializacion");
+      }
+    });
     $("#dlg-baja").close();
   } catch (err) {
     console.error(err);
-    error.textContent = mensajeDe(err, "No se pudo dar de baja el insumo.");
+    error.textContent = mensajeDe(err, "No se pudo procesar la baja.");
   }
 });
 
@@ -410,10 +440,20 @@ async function reactivar(insumo) {
 }
 
 /* ================= MOVIMIENTOS: historial (solo administrador) ================= */
-function renderMovimientos(lista) {
+function renderMovimientos() {
+  const dia = $("#filtro-movimientos-dia").value;
+  const lista = movimientos.filter((m) => {
+    if (!dia) return true;
+    const fecha = m.fecha?.toDate?.();
+    if (!fecha) return false;
+    const yyyy = fecha.getFullYear();
+    const mm = String(fecha.getMonth() + 1).padStart(2, "0");
+    const dd = String(fecha.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}` === dia;
+  });
   $("#tbody-movimientos").innerHTML = lista.length ? lista.map((m) => {
     const fecha = m.fecha?.toDate?.().toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) ?? "—";
-    const signo = m.tipo === "salida" ? "−" : m.tipo === "baja" || m.tipo === "reactivacion" ? "" : "+";
+    const signo = m.tipo === "salida" || m.tipo === "baja_stock" ? "−" : m.tipo === "baja" || m.tipo === "reactivacion" ? "" : "+";
     return `<tr>
       <td><small>${esc(fecha)}</small></td>
       <td class="mov-${esc(m.tipo)}">${esc(TIPOS_MOVIMIENTO[m.tipo] ?? m.tipo)}</td>
@@ -422,8 +462,10 @@ function renderMovimientos(lista) {
       <td class="num">${m.stockResultante}</td>
       <td>${esc(m.usuario)}</td>
       <td><small>${esc(m.detalle)}</small></td></tr>`;
-  }).join("") : `<tr><td colspan="7" class="vacio">Todavía no hay movimientos.</td></tr>`;
+  }).join("") : `<tr><td colspan="7" class="vacio">No hay movimientos para la fecha seleccionada.</td></tr>`;
 }
+$("#filtro-movimientos-dia").addEventListener("change", renderMovimientos);
+$("#limpiar-filtro-movimientos").addEventListener("click", () => { $("#filtro-movimientos-dia").value = ""; renderMovimientos(); });
 
 /* ================= USUARIOS (solo administrador) ================= */
 function renderUsuarios() {
