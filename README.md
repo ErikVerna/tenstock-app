@@ -2,7 +2,7 @@
 
 # TenStock — Control de stock de insumos tecnológicos
 
-Proyecto de TecnoNova. Reemplaza el Excel y el papel por un sistema web con stock en tiempo real.
+Proyecto de TecnoNova. Reemplaza el Excel y el papel por un sistema web con stock centralizado: cada venta, entrada o devolución se registra y todos los usuarios conectados ven el stock actualizado sin recargar.
 
 **Tecnologías:** HTML, CSS, JavaScript (módulos ES) y Firebase Firestore.
 
@@ -14,17 +14,43 @@ tenstock/
 ├── css/styles.css          Estilos (responsive, modo claro y oscuro)
 └── js/
     ├── firebase-config.js  Datos de conexión a Firebase (lo completa cada equipo)
-    └── app.js              Login, ABM de insumos, ventas y ABM de usuarios
+    ├── app.js              Login, insumos, ventas, entradas, bajas, movimientos y usuarios
+    └── carga-demo.js       Carga opcional de productos de ejemplo (no se carga sola)
 ```
 
 ## Usuarios precargados
 
-| Perfil | Usuario | Contraseña | Puede |
-|---|---|---|---|
-| Administrador | `admin` | `admin123` | Todo: ABM de insumos, ABM de usuarios y permisos |
-| Usuario | `empleado` | `empleado123` | Consultar, registrar ventas y editar solo los campos que permita el admin (por defecto: stock) |
+| Perfil | Usuario | Contraseña |
+|---|---|---|
+| Administrador | `admin` | `admin123` |
+| Usuario | `empleado` | `empleado123` |
 
 Se crean solos la primera vez que se abre la app y la colección `usuarios` está vacía.
+
+## Permisos por perfil
+
+| Acción | Administrador | Usuario |
+|---|---|---|
+| Consultar / buscar (por nombre, marca o SKU; filtro por categoría) | Sí | Sí |
+| Registrar venta (salida de stock) | Sí | Sí |
+| Registrar entrada (reposición o devolución de cliente) | Sí | Sí |
+| Alta de producto nuevo | Sí | No |
+| Modificar datos (nombre, categoría, marca, precio, SKU) | Todos | Solo los que el admin tilde en su ficha (por defecto ninguno) |
+| Modificar el stock a mano | No (nadie) | No (nadie) |
+| Baja (lógica, con motivo) y reactivación | Sí | No |
+| Ver historial de movimientos | Sí | No |
+| ABM de usuarios y permisos | Sí | No |
+
+Los permisos de modificación de datos son **configurables**: el admin los tilda por usuario en la pestaña *Usuarios*. El resto de los permisos es fijo por perfil.
+
+## Reglas de negocio
+
+- **Alta vs. entrada.** *Alta* es crear un producto que no existe (la hace el admin, con un stock inicial). *Entrada* es sumar unidades a un producto que ya existe (reposición semanal o devolución): no se vuelve a dar de alta, se suma al stock.
+- **Venta.** Descuenta el stock en el momento. Si la cantidad pedida es mayor al stock disponible, **la venta se bloquea** con el mensaje "Stock insuficiente". Con stock 0 el botón *Vender* queda deshabilitado y la fila muestra "Sin stock".
+- **Devolución.** Es una entrada con motivo "Devolución": suma al stock del mismo producto, no crea uno nuevo. La puede registrar el vendedor en el mostrador, sin depender del administrador.
+- **Caso "última unidad".** Se vende la última unidad (stock 0, "Sin stock") → el cliente la devuelve → el empleado registra una Entrada por devolución (stock 1) → el siguiente cliente ya puede comprarla. Todo queda en el historial.
+- **Baja.** Es lógica: el producto queda inactivo con un motivo (fuera de comercialización, rotura, garantía u otro). No se vende ni aparece en el listado, pero conserva su historial y el admin puede reactivarlo (*Ver dados de baja*).
+- **El stock no se edita a mano.** Solo cambia por movimientos (alta, venta, reposición, devolución), así cada cambio queda registrado con usuario y fecha.
 
 ---
 
@@ -64,6 +90,8 @@ El proyecto usa módulos ES, por eso **no funciona abriendo el `index.html` con 
 
 Ingresar con `admin` / `admin123`, cargar algunos insumos y probar una venta.
 
+**Datos de ejemplo (opcional).** `js/carga-demo.js` carga 30 productos de prueba. Ya no se ejecuta solo porque mostraba un aviso en cada visita. Para cargarlos una vez, agregar temporalmente `<script type="module" src="js/carga-demo.js"></script>` al final de `index.html`, abrir la app, y volver a sacar la línea.
+
 ### Paso 5 — Subir a GitHub
 Un integrante crea el repositorio y los demás se suman como colaboradores (*Settings → Collaborators*).
 
@@ -91,19 +119,25 @@ Las claves de `firebaseConfig` son públicas por diseño: identifican el proyect
 ## Cómo funciona el código
 
 **Base de datos (Firestore).** Tres colecciones:
-- `insumos`: nombre, categoria, marca, precio, stock, sku.
+- `insumos`: nombre, categoria, marca, precio, stock, sku, activo, motivoBaja, fechaBaja. Los documentos viejos sin el campo `activo` cuentan como activos.
 - `usuarios`: usuario, rol, activo, passHash, permisos (lista de campos editables).
-- `movimientos`: historial de salidas por venta (insumo, cantidad, usuario, fecha).
+- `movimientos`: historial de todo cambio de stock (alta, venta, reposición, devolución, baja, reactivación) con insumo, cantidad, stock resultante, usuario y fecha.
 
 **Login.** Busca el documento `usuarios/{usuario}`, compara el hash SHA-256 de la contraseña ingresada con el guardado, y guarda el perfil en `sessionStorage`. Las contraseñas nunca se guardan en texto plano.
 
-**Perfiles.** Un administrador ve el botón *Agregar insumo*, *Dar de baja* y la pestaña *Usuarios*. Un usuario solo ve *Vender* y *Editar*, y en el formulario de edición quedan deshabilitados los campos que el admin no le permitió.
+**Perfiles.** Un administrador ve *Agregar insumo*, *Dar de baja* y las pestañas *Movimientos* y *Usuarios*. Un usuario ve *Vender* y *Entrada*, y *Editar* solo si el admin le habilitó algún campo (los demás quedan deshabilitados). Ver la tabla de permisos más arriba.
 
-**Tiempo real.** `onSnapshot` mantiene la tabla sincronizada: si un empleado vende, todos los demás ven el stock nuevo sin recargar.
+**Actualización en vivo.** `onSnapshot` mantiene la tabla sincronizada: si un empleado vende, todos los demás ven el stock nuevo sin recargar. Lo que *no* es automático es la carga de datos: las entradas de mercadería las registra una persona y las ventas se cargan a mano en el sistema.
 
-**Ventas sin stock.** El descuento usa una transacción (`runTransaction`): lee el stock actual y lo descuenta en un solo paso. Si se pide más de lo disponible, la venta se rechaza, y dos ventas simultáneas no pueden dejar el stock en negativo. Esto ataca directamente el problema del negocio.
+**Movimientos de stock.** Venta, reposición y devolución pasan por una misma función (`moverStock`) que usa una transacción (`runTransaction`): lee el stock actual, lo modifica y registra el movimiento en un solo paso. Por eso nunca queda un cambio de stock sin registro, y dos usuarios operando el mismo producto a la vez no pueden dejar el stock negativo.
 
-**Validaciones.** SKU único, precio ≥ 0, stock entero ≥ 0, y los textos se escapan al mostrarlos para evitar inyección de HTML.
+**Ventas sin stock.** Regla elegida: **bloquear** la salida si la cantidad pedida supera el stock disponible. Esto ataca directamente el problema del negocio (ventas de productos que no había).
+
+**Búsqueda.** Por nombre, marca o SKU (el SKU permite ubicar rápido un producto cuando hay varios parecidos, por ejemplo dos pendrives de 8 GB de distinta marca), más filtro por categoría. No se implementó código de barras porque el negocio no lo usa hoy.
+
+**Edición segura.** Al modificar un producto solo se escriben los campos que cambiaron, y el stock no es editable: modificar un precio nunca pisa el stock de una venta que ocurrió mientras tanto.
+
+**Validaciones.** SKU único, precio ≥ 0, stock inicial entero ≥ 0, cantidades enteras ≥ 1, y los textos se escapan al mostrarlos para evitar inyección de HTML.
 
 ---
 
@@ -125,7 +159,7 @@ Utilizamos Claude (Anthropic) como asistente durante el desarrollo. Le entregamo
 ## Limitaciones conocidas y mejoras futuras
 
 - **Seguridad:** el login se valida en el navegador y las reglas de Firestore están abiertas. Para un sistema real se debería usar **Firebase Authentication** y reglas que verifiquen el rol del usuario.
-- **Baja:** elimina el documento. Una alternativa es una baja lógica (`activo: false`) para conservar el historial.
 - **Alta masiva:** como el administrador carga mercadería una vez por semana, se podría agregar importación desde CSV.
-- **Movimientos:** hoy se registran las salidas; las entradas (altas y reposiciones) podrían registrarse igual para tener trazabilidad completa.
-- **Alertas:** avisar automáticamente cuando un insumo baja de un stock mínimo configurable.
+- **Alertas:** hoy el color marca stock bajo (≤ 5, fijo en el código); se podría avisar automáticamente con un mínimo configurable por producto.
+- **Venta con varios productos:** hoy cada venta es de un solo producto; un carrito/ticket con varios ítems sería una mejora.
+- **Historial:** la pestaña *Movimientos* muestra los últimos 50; se podría paginar o filtrar por fecha, producto o usuario.

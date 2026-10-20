@@ -38,6 +38,7 @@
       <strong class="logo">TenStock</strong>
       <nav class="tabs">
         <button class="tab activa" data-panel="panel-insumos">Insumos</button>
+        <button class="tab" data-panel="panel-movimientos" id="tab-movimientos" hidden>Movimientos</button>
         <button class="tab" data-panel="panel-usuarios" id="tab-usuarios" hidden>Usuarios</button>
       </nav>
       <div class="sesion">
@@ -52,6 +53,7 @@
         <div class="herramientas">
           <input id="buscar" type="search" placeholder="Buscar por nombre, marca o SKU">
           <select id="filtro-categoria"><option value="">Todas las categorías</option></select>
+          <label class="check" id="wrap-ver-bajas" hidden><input id="ver-bajas" type="checkbox"> Ver dados de baja</label>
           <button id="btn-nuevo-insumo" class="btn btn-primario" hidden>Agregar insumo</button>
         </div>
         <p id="msg-insumos" class="aviso" role="status"></p>
@@ -61,6 +63,19 @@
               <tr><th>Nombre</th><th>Categoría</th><th>Marca</th><th>SKU</th><th class="num">Precio</th><th class="num">Stock</th><th>Acciones</th></tr>
             </thead>
             <tbody id="tbody-insumos"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- MOVIMIENTOS (solo admin) -->
+      <section id="panel-movimientos" class="panel" hidden>
+        <div class="herramientas">
+          <h2>Últimos movimientos de stock</h2>
+        </div>
+        <div class="tabla-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Insumo</th><th class="num">Cantidad</th><th class="num">Stock resultante</th><th>Usuario</th><th>Detalle</th></tr></thead>
+            <tbody id="tbody-movimientos"></tbody>
           </table>
         </div>
       </section>
@@ -91,8 +106,9 @@
       <label>SKU <input id="f-sku" required maxlength="60"></label>
       <div class="fila">
         <label>Precio (ARS) <input id="f-precio" type="number" min="0" step="1" required></label>
-        <label>Stock <input id="f-stock" type="number" min="0" step="1" required></label>
+        <label>Stock inicial <input id="f-stock" type="number" min="0" step="1" required></label>
       </div>
+      <small id="f-stock-ayuda"></small>
       <p id="insumo-error" class="error" role="alert"></p>
       <div class="acciones-dlg">
         <button type="button" class="btn btn-texto" data-cerrar>Cancelar</button>
@@ -114,6 +130,47 @@
     </form>
   </dialog>
 
+  <dialog id="dlg-entrada">
+    <form id="form-entrada" method="dialog">
+      <h2>Registrar entrada de stock</h2>
+      <p id="entrada-detalle"></p>
+      <label>Motivo
+        <select id="entrada-tipo">
+          <option value="reposicion">Reposición (llegó mercadería)</option>
+          <option value="devolucion">Devolución de un cliente</option>
+        </select>
+      </label>
+      <label>Cantidad <input id="entrada-cantidad" type="number" min="1" step="1" value="1" required></label>
+      <label>Nota (opcional) <input id="entrada-nota" maxlength="120" placeholder="Ej.: remito 0012 / ticket 345"></label>
+      <p id="entrada-error" class="error" role="alert"></p>
+      <div class="acciones-dlg">
+        <button type="button" class="btn btn-texto" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn btn-primario">Registrar entrada</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-baja">
+    <form id="form-baja" method="dialog">
+      <h2>Dar de baja</h2>
+      <p id="baja-detalle"></p>
+      <label>Motivo
+        <select id="baja-motivo">
+          <option value="fuera_de_comercializacion">Fuera de comercialización</option>
+          <option value="rotura">Rotura</option>
+          <option value="garantia">Garantía / devolución a proveedor</option>
+          <option value="otro">Otro</option>
+        </select>
+      </label>
+      <small>El insumo queda inactivo: no se vende ni se lista, pero se conserva su historial y se puede reactivar.</small>
+      <p id="baja-error" class="error" role="alert"></p>
+      <div class="acciones-dlg">
+        <button type="button" class="btn btn-texto" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn btn-primario btn-baja">Confirmar baja</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="dlg-usuario">
     <form id="form-usuario" method="dialog">
       <h2 id="dlg-usuario-titulo">Usuario</h2>
@@ -130,8 +187,8 @@
         <label class="check"><input type="checkbox" value="marca"> Marca</label>
         <label class="check"><input type="checkbox" value="precio"> Precio</label>
         <label class="check"><input type="checkbox" value="sku"> SKU</label>
-        <label class="check"><input type="checkbox" value="stock"> Stock</label>
       </fieldset>
+      <small>El stock no se edita a mano: cambia solo con ventas, entradas y devoluciones.</small>
       <label class="check"><input id="u-activo" type="checkbox" checked> Usuario activo</label>
       <p id="usuario-error" class="error" role="alert"></p>
       <div class="acciones-dlg">
@@ -142,7 +199,7 @@
   </dialog>
 
   <script type="module" src="js/app.js"></script>
-  <!-- ============ para probar la demo de datos ============ -->
-  <script type="module" src="js/carga-demo.js"></script>
+  <!-- Datos de demo: js/carga-demo.js ya no se carga solo (mostraba un alert en cada visita).
+       Para cargarlos una vez, ver el README. -->
 </body>
 </html>
