@@ -4,8 +4,8 @@
   --panel: #ffffff;
   --linea: #d6dbd3;
   --suave: #5d6a75;
-  --acento: #1c1c98;
-  --acento-osc: #0a5246;
+  --acento: #0e2c6b;
+  --acento-osc: #4e50ab;
   --alerta: #b4540a;
   --peligro: #b3261e;
   --radio: 6px;
@@ -17,8 +17,8 @@
     --panel: #1a222b;
     --linea: #2f3a45;
     --suave: #9aa7b2;
-    --acento: #3a7cb1;
-    --acento-osc: #2d4a5e;
+    --acento: #4e4ec6;
+    --acento-osc: #5e7fa0;
     --alerta: #e08a45;
     --peligro: #f0766e;
   }
@@ -109,7 +109,7 @@ td small { color: var(--suave); }
 .fila-baja td { color: var(--suave); background: var(--papel); }
 .etiqueta { display: inline-block; font-size: .78rem; font-weight: 600; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--linea); color: var(--suave); }
 .etiqueta-cero { color: var(--peligro); border-color: var(--peligro); }
-.mov-salida, .mov-baja { color: var(--peligro); font-weight: 600; }
+.mov-salida, .mov-baja, .mov-baja_error { color: var(--peligro); font-weight: 600; }
 .mov-reposicion, .mov-devolucion, .mov-alta, .mov-reactivacion { color: var(--acento); font-weight: 600; }
 
 /* ---------- Diálogos ---------- */

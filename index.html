@@ -102,7 +102,8 @@
   <dialog id="dlg-insumo">
     <form id="form-insumo" method="dialog">
       <h2 id="dlg-insumo-titulo">Insumo</h2>
-      <label>Nombre <input id="f-nombre" required maxlength="120"></label>
+      <label>Nombre <input id="f-nombre" required maxlength="120" autocomplete="off"></label>
+      <p id="insumo-duplicado-aviso" class="aviso" role="status" hidden></p>
       <label>Categoría <select id="f-categoria" required></select></label>
       <label>Marca <input id="f-marca" required maxlength="60"></label>
       <label>SKU <input id="f-sku" required maxlength="60"></label>
@@ -162,6 +163,10 @@
           <option value="desactivar">Retirar de comercialización</option>
         </select>
       </label>
+      <label class="check baja-error-carga-check" id="baja-error-carga-wrap" hidden><input id="baja-error-carga" type="checkbox"> Otro: insumo duplicado o cargado por error</label>
+      <label id="baja-error-carga-detalle-wrap" hidden>Detalle del error de carga
+        <input id="baja-error-carga-detalle" maxlength="180" placeholder="Ej.: el insumo ya existe con otro nombre" />
+      </label>
       <label id="baja-cantidad-wrap">Cantidad defectuosa
         <input id="baja-cantidad" type="number" min="1" step="1" value="1" required>
       </label>
@@ -169,8 +174,11 @@
         <select id="baja-motivo">
           <option value="rotura">Rotura</option>
           <option value="garantia">Garantía / devolución a proveedor</option>
-          <option value="otro">Otro</option>
+          <option value="otro">Otro (por ejemplo, insumo cargado por error o con nombre incorrecto)</option>
         </select>
+      </label>
+      <label id="baja-otro-wrap" hidden>Detalle del motivo
+        <input id="baja-otro-detalle" maxlength="180" placeholder="Ej.: se cargó por error; ya existe con otro nombre">
       </label>
       <small id="baja-ayuda">Descuenta las unidades dañadas y conserva el producto activo.</small>
       <p id="baja-error" class="error" role="alert"></p>

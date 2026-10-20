@@ -26,7 +26,7 @@ const MOTIVOS_BAJA = {
 };
 const TIPOS_MOVIMIENTO = {
   alta: "Alta", salida: "Venta", reposicion: "Reposición", devolucion: "Devolución",
-  baja: "Desactivación comercial", baja_stock: "Baja de stock", reactivacion: "Reactivación"
+  baja: "Desactivación comercial", baja_stock: "Baja de stock", baja_error: "Baja por error de carga", reactivacion: "Reactivación"
 };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
@@ -206,12 +206,30 @@ $("#tbody-insumos").addEventListener("click", (e) => {
 /* ================= INSUMOS: alta y modificación ================= */
 $("#btn-nuevo-insumo").addEventListener("click", () => abrirInsumo(null));
 
+function normalizarNombre(nombre) {
+  return String(nombre ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
+}
+
+function actualizarAvisoNombreDuplicado() {
+  const aviso = $("#insumo-duplicado-aviso");
+  const nombre = normalizarNombre($("#f-nombre").value);
+  const existentes = insumos.filter((i) => i.id !== insumoEditandoId && normalizarNombre(i.nombre) === nombre);
+  aviso.hidden = !nombre || existentes.length === 0 || !!insumoEditandoId;
+  aviso.textContent = existentes.length
+    ? `⚠️Atención!!: Ya existe un insumo con ese nombre: ${existentes.map((i) => `${i.nombre} (SKU: ${i.sku}, stock: ${i.stock})`).join("; ")}. Revisá si corresponde usar el existente en lugar de crear un duplicado.`
+    : "";
+}
+
+$("#f-nombre").addEventListener("input", actualizarAvisoNombreDuplicado);
+
 function abrirInsumo(insumo) {
   insumoEditandoId = insumo?.id ?? null;
   insumoOriginal = insumo ? { ...insumo } : null;
   $("#dlg-insumo-titulo").textContent = insumo ? "Modificar insumo" : "Agregar insumo";
   $("#form-insumo").reset();
   $("#insumo-error").textContent = "";
+  $("#insumo-duplicado-aviso").hidden = true;
+  $("#insumo-duplicado-aviso").textContent = "";
   CAMPOS_EDITABLES.forEach((c) => {
     const input = $("#f-" + c);
     input.value = insumo ? insumo[c] : "";
@@ -223,6 +241,7 @@ function abrirInsumo(insumo) {
   $("#f-stock-ayuda").textContent = insumo
     ? "El stock no se edita acá: usá Vender o Entrada para que quede registrado."
     : "Se registra como movimiento de alta. Si después llega más mercadería, usá Entrada.";
+  actualizarAvisoNombreDuplicado();
   $("#dlg-insumo").showModal();
 }
 
@@ -249,6 +268,18 @@ $("#form-insumo").addEventListener("submit", async (e) => {
     if (repetido.docs.some((d) => d.id !== insumoEditandoId)) {
       error.textContent = "Ya existe un insumo con ese SKU.";
       return;
+    }
+    if (!insumoEditandoId) {
+      // Consultar Firestore al momento de guardar evita depender solo del estado local.
+      const todosLosInsumos = await getDocs(collection(db, "insumos"));
+      const mismoNombre = todosLosInsumos.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((i) => normalizarNombre(i.nombre) === normalizarNombre(datos.nombre));
+      if (mismoNombre.length) {
+        error.textContent = `No se puede crear el insumo: ya existe uno con ese nombre (${mismoNombre.map((i) => `${i.nombre}, SKU ${i.sku}, stock ${i.stock}`).join("; ")}). Usá el insumo existente.`;
+        actualizarAvisoNombreDuplicado();
+        return;
+      }
     }
     if (insumoEditandoId) {
       // Solo se escriben los campos que cambiaron: así editar un precio nunca pisa el stock.
@@ -372,39 +403,59 @@ $("#form-entrada").addEventListener("submit", async (e) => {
 function abrirBaja(insumo) {
   bajaInsumoId = insumo.id;
   $("#baja-detalle").textContent = `${insumo.nombre} · stock actual: ${insumo.stock}`;
-  $("#baja-operacion").value = "stock";
-  $("#baja-cantidad").value = 1;
-  $("#baja-cantidad").max = insumo.stock;
+  // Sin stock, la opción predeterminada es retirar de comercialización.
+  $("#baja-operacion").value = Number(insumo.stock) === 0 ? "desactivar" : "stock";
+  $("#baja-cantidad").value = Number(insumo.stock) > 0 ? 1 : "";
+  $("#baja-cantidad").max = Math.max(0, Number(insumo.stock) || 0);
   $("#baja-motivo").value = "rotura";
+  $("#baja-otro-detalle").value = "";
+  $("#baja-error-carga").checked = false;
+  $("#baja-error-carga-detalle").value = "";
   $("#baja-error").textContent = "";
   actualizarFormularioBaja();
   $("#dlg-baja").showModal();
 }
 
 function actualizarFormularioBaja() {
-  const esStock = $("#baja-operacion").value === "stock";
+  const esRetiro = $("#baja-operacion").value === "desactivar";
+  // La casilla especial solo corresponde al retiro de comercialización.
+  $("#baja-error-carga-wrap").hidden = !esRetiro;
+  if (!esRetiro) $("#baja-error-carga").checked = false;
+  const errorCarga = esRetiro && $("#baja-error-carga").checked;
+  const esStock = !esRetiro;
   $("#baja-cantidad-wrap").hidden = !esStock;
   $("#baja-motivo-wrap").hidden = !esStock;
-  $("#baja-ayuda").textContent = esStock
-    ? "Descuenta las unidades dañadas y conserva el producto activo."
-    : "Solo se permite si el stock es cero y el producto se retira de comercialización.";
-  $("#baja-submit").textContent = esStock ? "Registrar baja de stock" : "Desactivar producto";
+  $("#baja-cantidad").disabled = !esStock;
+  $("#baja-cantidad").required = esStock;
+  $("#baja-motivo").disabled = !esStock;
+  $("#baja-otro-wrap").hidden = !esStock || $("#baja-motivo").value !== "otro";
+  $("#baja-error-carga-detalle-wrap").hidden = !errorCarga;
+  $("#baja-error-carga-detalle").required = errorCarga;
+  $("#baja-ayuda").textContent = errorCarga
+    ? "Retira este registro por duplicado o error de carga, conserva el stock registrado y deja constancia del motivo en movimientos."
+    : esStock
+      ? "Descuenta las unidades indicadas y conserva el producto activo."
+      : "Retira el producto de comercialización. Solo se permite con stock cero, salvo que marques la opción de error de carga.";
+  $("#baja-submit").textContent = errorCarga ? "Retirar por error de carga" : esStock ? "Registrar baja de stock" : "Desactivar producto";
 }
 $("#baja-operacion").addEventListener("change", actualizarFormularioBaja);
+$("#baja-motivo").addEventListener("change", actualizarFormularioBaja);
+$("#baja-error-carga").addEventListener("change", actualizarFormularioBaja);
 
-async function cambiarEstado(insumoId, activo, motivo) {
+async function cambiarEstado(insumoId, activo, motivo, opciones = {}) {
   await runTransaction(db, async (tx) => {
     const ref = doc(db, "insumos", insumoId);
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new ReglaError("El insumo ya no existe.");
     const ins = snap.data();
-    if (!activo && ins.stock !== 0) throw new ReglaError("Para retirar un producto de comercialización, primero debe quedar sin stock.");
+    if (!activo && ins.stock !== 0 && !opciones.permitirConStock) throw new ReglaError("Para retirar un producto de comercialización, primero debe quedar sin stock. Si es un registro duplicado o cargado por error, usá la opción correspondiente.");
     tx.update(ref, activo
       ? { activo: true, motivoBaja: null, fechaBaja: null }
       : { activo: false, motivoBaja: motivo, fechaBaja: serverTimestamp() });
+    const tipoMovimiento = activo ? "reactivacion" : (opciones.detalle ? "baja_error" : "baja");
+    const detalleMovimiento = activo ? "Reactivado" : (opciones.detalle || MOTIVOS_BAJA[motivo]);
     tx.set(doc(collection(db, "movimientos")), movimiento(
-      insumoId, ins, activo ? "reactivacion" : "baja", 0, ins.stock,
-      activo ? "Reactivado" : MOTIVOS_BAJA[motivo]));
+      insumoId, ins, tipoMovimiento, 0, ins.stock, detalleMovimiento));
   });
 }
 
@@ -412,16 +463,31 @@ $("#form-baja").addEventListener("submit", async (e) => {
   e.preventDefault();
   const error = $("#baja-error");
   error.textContent = "";
+  const errorCarga = $("#baja-error-carga").checked;
   const operacion = $("#baja-operacion").value;
   const cantidad = Number($("#baja-cantidad").value);
   const motivo = $("#baja-motivo").value;
-  if (operacion === "stock" && (!Number.isInteger(cantidad) || cantidad < 1)) {
+  const otroDetalle = $("#baja-otro-detalle").value.trim();
+  const detalleErrorCarga = $("#baja-error-carga-detalle").value.trim();
+  if (errorCarga && !detalleErrorCarga) {
+    error.textContent = "Indicá por qué se da de baja este registro duplicado o cargado por error."; return;
+  }
+  if (!errorCarga && operacion === "stock" && motivo === "otro" && !otroDetalle) {
+    error.textContent = "Indicá brevemente el motivo de la baja."; return;
+  }
+  if (!errorCarga && operacion === "stock" && (!Number.isInteger(cantidad) || cantidad < 1)) {
     error.textContent = "Ingresá una cantidad entera mayor que cero."; return;
   }
   try {
     await conEspera($("#form-baja"), "Procesando…", async () => {
-      if (operacion === "stock") {
-        await moverStock(bajaInsumoId, "baja_stock", cantidad, MOTIVOS_BAJA[motivo] || motivo);
+      if (errorCarga) {
+        await cambiarEstado(bajaInsumoId, false, "otro", {
+          permitirConStock: true,
+          detalle: `Baja por error de carga/duplicado: ${detalleErrorCarga}`
+        });
+      } else if (operacion === "stock") {
+        const detalle = motivo === "otro" ? `Otro: ${otroDetalle}` : (MOTIVOS_BAJA[motivo] || motivo);
+        await moverStock(bajaInsumoId, "baja_stock", cantidad, detalle);
       } else {
         await cambiarEstado(bajaInsumoId, false, "fuera_de_comercializacion");
       }
@@ -453,7 +519,7 @@ function renderMovimientos() {
   });
   $("#tbody-movimientos").innerHTML = lista.length ? lista.map((m) => {
     const fecha = m.fecha?.toDate?.().toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) ?? "—";
-    const signo = m.tipo === "salida" || m.tipo === "baja_stock" ? "−" : m.tipo === "baja" || m.tipo === "reactivacion" ? "" : "+";
+    const signo = m.tipo === "salida" || m.tipo === "baja_stock" ? "−" : m.tipo === "baja" || m.tipo === "baja_error" || m.tipo === "reactivacion" ? "" : "+";
     return `<tr>
       <td><small>${esc(fecha)}</small></td>
       <td class="mov-${esc(m.tipo)}">${esc(TIPOS_MOVIMIENTO[m.tipo] ?? m.tipo)}</td>
@@ -461,7 +527,7 @@ function renderMovimientos() {
       <td class="num">${signo}${m.cantidad}</td>
       <td class="num">${m.stockResultante}</td>
       <td>${esc(m.usuario)}</td>
-      <td><small>${esc(m.detalle)}</small></td></tr>`;
+      <td>${m.detalle ? `<small class="movimiento-detalle" title="${esc(m.detalle)}">${esc(m.detalle)}</small>` : "—"}</td></tr>`;
   }).join("") : `<tr><td colspan="7" class="vacio">No hay movimientos para la fecha seleccionada.</td></tr>`;
 }
 $("#filtro-movimientos-dia").addEventListener("change", renderMovimientos);
