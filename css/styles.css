@@ -81,7 +81,8 @@ input:disabled { background: var(--papel); color: var(--suave); cursor: not-allo
   display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
   padding: 12px 24px; background: var(--panel); border-bottom: 1px solid var(--linea);
 }
-.logo { font-size: 1.3rem; letter-spacing: -.02em; }
+/* El nombre de la app en la barra y el archivo de logo del login tienen estilos separados */
+.barra .logo { font-size: 1.3rem; letter-spacing: -.02em; font-weight: 700; color: var(--acento); }
 .tabs { display: flex; gap: 4px; flex: 1; }
 .tab {
   font: inherit; font-weight: 600; cursor: pointer; background: none; border: 0;
@@ -135,14 +136,223 @@ small { color: var(--suave); }
   main { padding: 16px; }
 }
 
-.logo-container {
-    display: flex;
-    align-items: center;
-    gap: 15px;
+
+/* ---------- Pulido visual TenStock ---------- */
+:root {
+  --radio: 10px;
 }
 
-.logo {
-    width: 350px;
-    height: 350px;
+.login-marca .logo {
+  display: block;
+  width: min(100%, 320px);
+  height: auto;
+  max-height: 240px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.barra {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  gap: 20px;
+  box-shadow: 0 2px 12px rgba(16, 42, 80, 0.05);
+}
+
+.tab {
+  border-radius: 8px 8px 0 0;
+  transition: color .18s ease, background-color .18s ease;
+}
+
+.tab:hover {
+  color: var(--acento);
+  background: color-mix(in srgb, var(--acento) 7%, transparent);
+}
+
+.tab.activa {
+  color: var(--acento);
+}
+
+main {
+  width: 100%;
+  max-width: 1440px;
+  padding: 18px 24px 28px;
+  margin: 0 auto;
+}
+
+/* Banner de bienvenida: usa img/banner-tenstock.png */
+.welcome-banner {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  min-height: 190px;
+  padding: 28px 34px;
+  margin: 0 0 18px;
+  overflow: hidden;
+  border: 1px solid rgba(65, 155, 255, .15);
+  border-radius: 14px;
+  color: #fff;
+  background-color: #071b3b;
+  background-image:
+    linear-gradient(90deg, rgba(4, 18, 43, .30) 0%, rgba(4, 18, 43, .18) 43%, rgba(4, 18, 43, 0) 75%),
+    url("../img/banner-tenstock.png");
+  background-size: cover;
+  background-position: center 54%;
+  box-shadow: 0 8px 24px rgba(12, 45, 90, .12);
+}
+
+.welcome-banner__content {
+  position: relative;
+  z-index: 1;
+  max-width: 540px;
+}
+
+.welcome-banner__tag {
+  display: inline-block;
+  margin-bottom: 9px;
+  color: #6bd0ff;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+}
+
+.welcome-banner h1 {
+  margin: 0 0 10px;
+  color: #fff;
+  font-size: clamp(1.65rem, 3vw, 2.35rem);
+  line-height: 1.12;
+  letter-spacing: -.025em;
+}
+
+.welcome-banner h1 span {
+  color: #4ab4ff;
+}
+
+.welcome-banner p {
+  max-width: 440px;
+  margin: 0;
+  color: #e0edff;
+  font-size: .98rem;
+  line-height: 1.55;
+}
+
+/* Barra de búsqueda y filtros más claros */
+.herramientas {
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.herramientas input,
+.herramientas select {
+  border-radius: 8px;
+}
+
+.herramientas input:focus,
+.herramientas select:focus {
+  border-color: var(--acento);
+}
+
+.btn {
+  border-radius: 8px;
+  transition: transform .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+
+.btn-primario {
+  box-shadow: 0 3px 8px rgba(14, 44, 107, .14);
+}
+
+.btn-primario:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 12px rgba(14, 44, 107, .18);
+}
+
+.tabla-wrap {
+  border-radius: 10px;
+  box-shadow: 0 3px 14px rgba(20, 42, 70, .04);
+}
+
+th {
+  white-space: nowrap;
+}
+
+tbody tr {
+  transition: background-color .12s ease;
+}
+
+tbody tr:hover td {
+  background: color-mix(in srgb, var(--acento) 4%, var(--panel));
+}
+
+dialog {
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .22);
+}
+
+@media (max-width: 760px) {
+  .barra {
+    position: static;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+
+  .tabs {
+    order: 3;
+    flex-basis: 100%;
+    overflow-x: auto;
+  }
+
+  .sesion {
+    margin-left: auto;
+  }
+
+  main {
+    padding: 12px 14px 22px;
+  }
+
+  .welcome-banner {
+    min-height: 175px;
+    padding: 22px 20px;
+    margin-bottom: 14px;
+    background-position: 62% center;
+  }
+
+  .welcome-banner__content {
+    max-width: 100%;
+  }
+
+  .welcome-banner h1 {
+    max-width: 340px;
+    font-size: clamp(1.45rem, 6vw, 1.9rem);
+  }
+
+  .welcome-banner p {
+    max-width: 300px;
+    font-size: .9rem;
+  }
+
+  .login-marca .logo {
+    width: min(100%, 250px);
+    max-height: 180px;
+  }
+}
+
+/* Logo y nombre de TenStock en la barra superior */
+.marca-app {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.logo-barra {
+    width: 46px;
+    height: 46px;
     object-fit: contain;
+}
+
+.nombre-app {
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: var(--tinta);
 }
