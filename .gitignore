@@ -14,8 +14,5 @@ desktop.ini
 # Configuración local de editores
 .vscode/
 
-#API Keys y datos sensibles
-firebase-config.js
-
 # Logs
 npm-debug.log*

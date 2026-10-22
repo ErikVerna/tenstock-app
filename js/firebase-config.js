@@ -1,3 +1,5 @@
+/* El apiKey esta publico porque es una pagina para testear, sabemos de que 
+no es seguro tenerlo publico, pero para este caso no hay problema.*/
 export const firebaseConfig = {
   apiKey: "AIzaSyBMrLL6mJVQ39KGcXq_qu1xhWNJGo0mRLk",
   authDomain: "tenstock-93d71.firebaseapp.com",
