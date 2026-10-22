@@ -35,7 +35,9 @@
   <!-- ============ APP ============ -->
   <section id="vista-app" hidden>
     <header class="barra">
-      <strong class="logo">TenStock</strong>
+      <div class="marca-app">
+        <img src="./img/logo.png" alt="Logo de TenStock" class="logo-barra">
+      </div>
       <nav class="tabs">
         <button class="tab activa" data-panel="panel-insumos">Insumos</button>
         <button class="tab" data-panel="panel-movimientos" id="tab-movimientos" hidden>Movimientos</button>
@@ -48,6 +50,15 @@
     </header>
 
     <main>
+      <!-- Banner de bienvenida -->
+      <section class="welcome-banner" aria-label="Bienvenido a TenStock">
+        <div class="welcome-banner__content">
+          <span class="welcome-banner__tag">GESTIÓN INTELIGENTE DE INSUMOS</span>
+          <h1>Tu inventario, <span>siempre bajo control</span></h1>
+          <p>Gestioná tus insumos, consultá el stock y mantené tus productos organizados desde un solo lugar.</p>
+        </div>
+      </section>
+
       <!-- INSUMOS -->
       <section id="panel-insumos" class="panel">
         <div class="herramientas">
