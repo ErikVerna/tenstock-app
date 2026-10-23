@@ -33,6 +33,11 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const pesos = (n) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n);
 
+function mostrarExito(mensaje) {
+  $("#exito-mensaje").textContent = mensaje;
+  $("#dlg-exito").showModal();
+}
+
 // Error de regla de negocio: su mensaje se le muestra tal cual al usuario.
 class ReglaError extends Error {}
 
@@ -51,6 +56,7 @@ let desuscribir = [];
 let insumoEditandoId = null;
 let insumoOriginal = null;
 let ventaInsumoId = null;
+let ventaPrecioUnitario = 0;
 let entradaInsumoId = null;
 let bajaInsumoId = null;
 let movimientos = [];
@@ -350,12 +356,19 @@ const mensajeDe = (err, porDefecto) => (err instanceof ReglaError ? err.message 
 /* ================= VENTAS (salida de stock) ================= */
 function abrirVenta(insumo) {
   ventaInsumoId = insumo.id;
-  $("#venta-detalle").textContent = `${insumo.nombre} · stock disponible: ${insumo.stock}`;
+  ventaPrecioUnitario = Number(insumo.precio) || 0;
+  $("#venta-detalle").textContent = `${insumo.nombre} · precio unitario: ${pesos(ventaPrecioUnitario)} · stock disponible: ${insumo.stock}`;
   $("#venta-cantidad").value = 1;
   $("#venta-cantidad").max = insumo.stock;
+  $("#venta-total").textContent = pesos(ventaPrecioUnitario);
   $("#venta-error").textContent = "";
   $("#dlg-venta").showModal();
 }
+
+$("#venta-cantidad").addEventListener("input", () => {
+  const cantidad = Math.max(0, Number($("#venta-cantidad").value) || 0);
+  $("#venta-total").textContent = pesos(cantidad * ventaPrecioUnitario);
+});
 
 $("#form-venta").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -366,6 +379,7 @@ $("#form-venta").addEventListener("submit", async (e) => {
   try {
     await conEspera($("#form-venta"), "Procesando venta…", () => moverStock(ventaInsumoId, "salida", cantidad));
     $("#dlg-venta").close();
+    mostrarExito("¡Venta exitosa!");
   } catch (err) {
     console.error(err);
     error.textContent = mensajeDe(err, "No se pudo registrar la venta.");
@@ -393,6 +407,7 @@ $("#form-entrada").addEventListener("submit", async (e) => {
     await conEspera($("#form-entrada"), "Registrando…", () =>
       moverStock(entradaInsumoId, $("#entrada-tipo").value, cantidad, $("#entrada-nota").value.trim()));
     $("#dlg-entrada").close();
+    mostrarExito("Operación exitosa");
   } catch (err) {
     console.error(err);
     error.textContent = mensajeDe(err, "No se pudo registrar la entrada.");
@@ -483,7 +498,7 @@ $("#form-baja").addEventListener("submit", async (e) => {
       if (errorCarga) {
         await cambiarEstado(bajaInsumoId, false, "otro", {
           permitirConStock: true,
-          detalle: `Baja por error de carga/duplicado: ${detalleErrorCarga}`
+          detalle: `${detalleErrorCarga}`
         });
       } else if (operacion === "stock") {
         const detalle = motivo === "otro" ? `Otro: ${otroDetalle}` : (MOTIVOS_BAJA[motivo] || motivo);
@@ -493,6 +508,7 @@ $("#form-baja").addEventListener("submit", async (e) => {
       }
     });
     $("#dlg-baja").close();
+    mostrarExito("Operación exitosa");
   } catch (err) {
     console.error(err);
     error.textContent = mensajeDe(err, "No se pudo procesar la baja.");

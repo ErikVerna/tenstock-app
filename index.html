@@ -136,6 +136,7 @@
       <h2>Registrar venta</h2>
       <p id="venta-detalle"></p>
       <label>Cantidad vendida <input id="venta-cantidad" type="number" min="1" step="1" value="1" required></label>
+      <p class="venta-total">Total de la venta: <strong id="venta-total">$ 0</strong></p>
       <p id="venta-error" class="error" role="alert"></p>
       <div class="acciones-dlg">
         <button type="button" class="btn btn-texto" data-cerrar>Cancelar</button>
@@ -185,11 +186,11 @@
         <select id="baja-motivo">
           <option value="rotura">Rotura</option>
           <option value="garantia">Garantía / devolución a proveedor</option>
-          <option value="otro">Otro (por ejemplo, insumo cargado por error o con nombre incorrecto)</option>
+          <option value="otro">Otro</option>
         </select>
       </label>
       <label id="baja-otro-wrap" hidden>Detalle del motivo
-        <input id="baja-otro-detalle" maxlength="180" placeholder="Ej.: se cargó por error; ya existe con otro nombre">
+        <input id="baja-otro-detalle" maxlength="180" placeholder="Ej.: Se rompió el envase al abrirlo">
       </label>
       <small id="baja-ayuda">Descuenta las unidades dañadas y conserva el producto activo.</small>
       <p id="baja-error" class="error" role="alert"></p>
@@ -225,6 +226,15 @@
         <button type="submit" class="btn btn-primario">Guardar usuario</button>
       </div>
     </form>
+  </dialog>
+
+
+  <dialog id="dlg-exito" class="dlg-exito">
+    <div class="exito-contenido">
+      <div class="exito-tilde" aria-hidden="true">✓</div>
+      <h2 id="exito-mensaje">Operación exitosa</h2>
+      <button type="button" class="btn btn-primario" data-cerrar>Cerrar</button>
+    </div>
   </dialog>
 
   <script type="module" src="js/app.js"></script>
