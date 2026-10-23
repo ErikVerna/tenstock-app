@@ -356,3 +356,40 @@ dialog {
     letter-spacing: -0.5px;
     color: var(--tinta);
 }
+
+/* Mejor contraste para acciones no disponibles y confirmaciones */
+.btn:disabled, .btn-texto:disabled {
+  background: #e2e5e9;
+  color: #8a929c;
+  border-color: #d5d9de;
+  cursor: not-allowed;
+  opacity: 1;
+  text-decoration: none;
+}
+.venta-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--papel);
+}
+.venta-total strong { font-size: 1.15rem; color: var(--acento); }
+.dlg-exito {
+  width: min(360px, calc(100% - 32px));
+  text-align: center;
+  border: 0;
+  border-radius: 16px;
+  padding: 28px;
+}
+.dlg-exito::backdrop { background: rgba(20, 28, 40, .45); }
+.exito-contenido { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.exito-contenido h2 { margin: 4px 0 12px; }
+.exito-tilde {
+  display: grid; place-items: center;
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: #dcfce7; color: #16803d;
+  font-size: 2.4rem; font-weight: 700;
+}
