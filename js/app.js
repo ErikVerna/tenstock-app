@@ -164,7 +164,8 @@ function renderInsumos() {
   const texto = $("#buscar").value.trim().toLowerCase();
   const cat = $("#filtro-categoria").value;
   const verBajas = esAdmin() && $("#ver-bajas").checked;
-  const visibles = insumos.filter((i) => verBajas || estaActivo(i));
+  // Si se activa "Ver dados de baja", mostrar únicamente los productos inactivos.
+  const visibles = insumos.filter((i) => verBajas ? !estaActivo(i) : estaActivo(i));
   const lista = visibles.filter((i) =>
     (!cat || i.categoria === cat) &&
     (!texto || [i.nombre, i.marca, i.sku].some((v) => v.toLowerCase().includes(texto))));
@@ -366,15 +367,27 @@ function abrirVenta(insumo) {
 }
 
 $("#venta-cantidad").addEventListener("input", () => {
-  const cantidad = Math.max(0, Number($("#venta-cantidad").value) || 0);
+  const campo = $("#venta-cantidad");
+  const cantidad = Math.max(0, Number(campo.value) || 0);
   $("#venta-total").textContent = pesos(cantidad * ventaPrecioUnitario);
+  const error = $("#venta-error");
+  if (campo.value !== "" && cantidad > Number(campo.max)) {
+    error.textContent = `No hay suficiente stock. Solo podés vender hasta ${campo.max} unidad${Number(campo.max) === 1 ? "" : "es"}.`;
+  } else {
+    error.textContent = "";
+  }
 });
 
 $("#form-venta").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const cantidad = Number($("#venta-cantidad").value);
+  const campo = $("#venta-cantidad");
+  const cantidad = Number(campo.value);
   const error = $("#venta-error");
-  if (!Number.isInteger(cantidad) || cantidad < 1) { error.textContent = "Ingresá una cantidad válida."; return; }
+  if (!Number.isInteger(cantidad) || cantidad < 1) { error.textContent = "Ingresá una cantidad entera mayor que cero."; campo.focus(); return; }
+  if (cantidad > Number(campo.max)) {
+    error.textContent = `No hay suficiente stock para realizar esta venta. Stock disponible: ${campo.max} unidad${Number(campo.max) === 1 ? "" : "es"}. Reducí la cantidad e intentá nuevamente.`;
+    campo.focus(); return;
+  }
   error.textContent = "";
   try {
     await conEspera($("#form-venta"), "Procesando venta…", () => moverStock(ventaInsumoId, "salida", cantidad));
@@ -498,7 +511,7 @@ $("#form-baja").addEventListener("submit", async (e) => {
       if (errorCarga) {
         await cambiarEstado(bajaInsumoId, false, "otro", {
           permitirConStock: true,
-          detalle: `${detalleErrorCarga}`
+          detalle: `Baja por error de carga/duplicado: ${detalleErrorCarga}`
         });
       } else if (operacion === "stock") {
         const detalle = motivo === "otro" ? `Otro: ${otroDetalle}` : (MOTIVOS_BAJA[motivo] || motivo);
@@ -538,7 +551,16 @@ function renderMovimientos() {
     const signo = m.tipo === "salida" || m.tipo === "baja_stock" ? "−" : m.tipo === "baja" || m.tipo === "baja_error" || m.tipo === "reactivacion" ? "" : "+";
     return `<tr>
       <td><small>${esc(fecha)}</small></td>
-      <td class="mov-${esc(m.tipo)}">${esc(TIPOS_MOVIMIENTO[m.tipo] ?? m.tipo)}</td>
+      <td><span class="mov-tag mov-${esc(m.tipo)}">${esc(({
+        salida: "↘ Venta · stock descontado",
+        reposicion: "↗ Entrada de stock",
+        devolucion: "↗ Devolución · stock sumado",
+        alta: "＋ Alta de producto",
+        baja_stock: "− Baja de stock",
+        baja: "⏸ Desactivación",
+        baja_error: "⚠ Error de carga",
+        reactivacion: "↻ Reactivación"
+      })[m.tipo] ?? TIPOS_MOVIMIENTO[m.tipo] ?? m.tipo)}</span></td>
       <td>${esc(m.insumo)}<br><small>${esc(m.sku)}</small></td>
       <td class="num">${signo}${m.cantidad}</td>
       <td class="num">${m.stockResultante}</td>

@@ -110,8 +110,46 @@ td small { color: var(--suave); }
 .fila-baja td { color: var(--suave); background: var(--papel); }
 .etiqueta { display: inline-block; font-size: .78rem; font-weight: 600; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--linea); color: var(--suave); }
 .etiqueta-cero { color: var(--peligro); border-color: var(--peligro); }
-.mov-salida, .mov-baja, .mov-baja_error { color: var(--peligro); font-weight: 600; }
-.mov-reposicion, .mov-devolucion, .mov-alta, .mov-reactivacion { color: var(--acento); font-weight: 600; }
+/* Etiquetas del historial: el color refleja el efecto de cada movimiento. */
+.mov-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: .82rem;
+  line-height: 1.25;
+  font-weight: 700;
+  white-space: normal;
+}
+.mov-salida, .mov-baja_stock, .mov-baja, .mov-baja_error {
+  color: #a52222;
+  background: #fee2e2;
+  border-color: #fecaca;
+}
+.mov-reposicion, .mov-devolucion, .mov-alta {
+  color: #166534;
+  background: #dcfce7;
+  border-color: #bbf7d0;
+}
+.mov-reactivacion {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #bfdbfe;
+}
+@media (prefers-color-scheme: dark) {
+  .mov-salida, .mov-baja_stock, .mov-baja, .mov-baja_error {
+    color: #fecaca; background: #451a1a; border-color: #7f1d1d;
+  }
+  .mov-reposicion, .mov-devolucion, .mov-alta {
+    color: #bbf7d0; background: #12351f; border-color: #166534;
+  }
+  .mov-reactivacion {
+    color: #bfdbfe; background: #172554; border-color: #1d4ed8;
+  }
+}
 
 /* ---------- Diálogos ---------- */
 dialog {

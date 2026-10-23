@@ -132,7 +132,7 @@
   </dialog>
 
   <dialog id="dlg-venta">
-    <form id="form-venta" method="dialog">
+    <form id="form-venta" method="dialog" novalidate>
       <h2>Registrar venta</h2>
       <p id="venta-detalle"></p>
       <label>Cantidad vendida <input id="venta-cantidad" type="number" min="1" step="1" value="1" required></label>
@@ -190,7 +190,7 @@
         </select>
       </label>
       <label id="baja-otro-wrap" hidden>Detalle del motivo
-        <input id="baja-otro-detalle" maxlength="180" placeholder="Ej.: Se rompió el envase al abrirlo">
+        <input id="baja-otro-detalle" maxlength="180" placeholder="Ej.: se cargó por error; ya existe con otro nombre">
       </label>
       <small id="baja-ayuda">Descuenta las unidades dañadas y conserva el producto activo.</small>
       <p id="baja-error" class="error" role="alert"></p>
