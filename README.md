@@ -189,4 +189,3 @@ Utilizamos Claude (Anthropic) como asistente durante el desarrollo. Le entregamo
 ## Usuarios
 
 <img width="1439" height="722" alt="Screen Shot 2026-10-22 at 23 29 46" src="https://github.com/user-attachments/assets/55306bc7-aaf6-4be3-a8ca-39e97cf6f6f7" />
-

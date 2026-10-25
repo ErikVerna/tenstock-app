@@ -113,6 +113,17 @@ $("#btn-salir").addEventListener("click", () => {
   $("#form-login").reset();
 });
 
+function cerrarSesionPorCambioDePermisos(mensaje = "Tus permisos fueron modificados. Iniciá sesión nuevamente para aplicar los cambios.") {
+  sessionStorage.removeItem("sesion");
+  desuscribir.forEach((f) => f());
+  desuscribir = [];
+  sesion = null;
+  $("#vista-app").hidden = true;
+  $("#vista-login").hidden = false;
+  $("#form-login").reset();
+  $("#login-error").textContent = mensaje;
+}
+
 function iniciarApp() {
   $("#vista-login").hidden = true;
   $("#vista-app").hidden = false;
@@ -122,6 +133,31 @@ function iniciarApp() {
   $("#wrap-ver-bajas").hidden = !esAdmin();
   $("#btn-nuevo-insumo").hidden = !esAdmin();
   mostrarPanel("panel-insumos");
+
+  // Vigila el documento del usuario conectado. Si cambian sus permisos, rol o estado,
+  // se cierra la sesión para evitar que siga usando permisos antiguos.
+  const usuarioSesion = sesion.usuario;
+  let primeraLecturaUsuario = true;
+  desuscribir.push(onSnapshot(doc(db, "usuarios", usuarioSesion), (snap) => {
+    if (!snap.exists()) {
+      cerrarSesionPorCambioDePermisos("Tu cuenta ya no existe. Iniciá sesión con otra cuenta.");
+      return;
+    }
+    const actual = snap.data();
+    if (!actual.activo) {
+      cerrarSesionPorCambioDePermisos("Tu cuenta fue desactivada. Consultá con el administrador.");
+      return;
+    }
+    if (primeraLecturaUsuario) {
+      primeraLecturaUsuario = false;
+      return;
+    }
+    const permisosActuales = JSON.stringify(soloEditables(actual.permisos).slice().sort());
+    const permisosSesion = JSON.stringify(soloEditables(sesion?.permisos).slice().sort());
+    if (!sesion || actual.rol !== sesion.rol || permisosActuales !== permisosSesion) {
+      cerrarSesionPorCambioDePermisos();
+    }
+  }, (err) => console.error("No se pudieron verificar los permisos de la sesión:", err)));
 
   // onSnapshot = tiempo real: si otro empleado vende, la tabla se actualiza sola
   desuscribir.push(onSnapshot(collection(db, "insumos"), (snap) => {
