@@ -678,11 +678,10 @@ function renderUsuarios() {
     <td>${u.rol === "admin" ? "Todos" : esc(soloEditables(u.permisos).join(", ") || "Ninguno (consulta, ventas y entradas)")}</td>
     <td>${u.activo ? "Activo" : "Inactivo"}</td>
     <td>
-      <button class="btn btn-texto" data-accion="editar" data-id="${esc(u.usuario)}">Editar</button>
-      ${u.usuario !== sesion.usuario ? `<button class="btn btn-texto btn-peligro" data-accion="borrar" data-id="${esc(u.usuario)}">Eliminar</button>` : ""}
+      <button class="btn btn-texto btn-icono btn-editar" data-accion="editar" data-id="${esc(u.usuario)}">✏️</button>
+      ${u.usuario !== sesion.usuario ? `<button class="btn btn-texto btn-icono btn-baja" data-accion="borrar" data-id="${esc(u.usuario)}">❌</button>` : ""}
     </td></tr>`).join("");
 }
-
 $("#tbody-usuarios").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-accion]");
   if (!b) return;
