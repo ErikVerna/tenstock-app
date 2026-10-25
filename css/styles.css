@@ -6,8 +6,8 @@
   --suave: #5d6a75;
   --acento: #0e2c6b;
   --acento-osc: #4e50ab;
-  --alerta: #b4540a;
-  --peligro: #b3261e;
+  --alerta: #b88b10;
+  --peligro: #f0766e;
   --radio: 6px;
 }
 @media (prefers-color-scheme: dark) {
@@ -19,7 +19,7 @@
     --suave: #9aa7b2;
     --acento: #4e4ec6;
     --acento-osc: #5e7fa0;
-    --alerta: #e08a45;
+    --alerta: #b4b10a; /*b4b10a*/
     --peligro: #f0766e;
   }
 }
