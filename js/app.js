@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc,
-  deleteDoc, onSnapshot, runTransaction, writeBatch, query, where, orderBy, limit, serverTimestamp
+  deleteDoc, onSnapshot, runTransaction, writeBatch, query, orderBy, limit, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -165,6 +165,7 @@ function iniciarApp() {
     insumos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     actualizarCategoriasMovimientos();
     renderInsumos();
+    actualizarAvisoSkuDuplicado();
     renderMovimientos();
   }, () => { $("#msg-insumos").textContent = "No se pudieron cargar los insumos."; }));
 
@@ -283,6 +284,24 @@ function normalizarNombre(nombre) {
   return String(nombre ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
 }
 
+function normalizarSku(sku) {
+  return String(sku ?? "").trim().toLocaleUpperCase("es");
+}
+
+function actualizarAvisoSkuDuplicado() {
+  const aviso = $("#sku-duplicado-aviso");
+  const sku = normalizarSku($("#f-sku").value);
+  const existentes = sku
+    ? insumos.filter((i) => i.id !== insumoEditandoId && normalizarSku(i.sku) === sku)
+    : [];
+  aviso.hidden = existentes.length === 0;
+  aviso.textContent = existentes.length
+    ? `⚠️ Este SKU ya está registrado en: ${existentes.map((i) => `${i.nombre} (SKU: ${i.sku})`).join("; ")}. Elegí un SKU diferente.`
+    : "";
+}
+
+$("#f-sku").addEventListener("input", actualizarAvisoSkuDuplicado);
+
 function actualizarAvisoNombreDuplicado() {
   const aviso = $("#insumo-duplicado-aviso");
   const nombre = normalizarNombre($("#f-nombre").value);
@@ -315,6 +334,7 @@ function abrirInsumo(insumo) {
     ? "El stock no se edita acá: usá Vender o Entrada para que quede registrado."
     : "Se registra como movimiento de alta. Si después llega más mercadería, usá Entrada.";
   actualizarAvisoNombreDuplicado();
+  actualizarAvisoSkuDuplicado();
   $("#dlg-insumo").showModal();
 }
 
@@ -337,15 +357,18 @@ $("#form-insumo").addEventListener("submit", async (e) => {
   }
 
   try {
-    const repetido = await getDocs(query(collection(db, "insumos"), where("sku", "==", datos.sku)));
-    if (repetido.docs.some((d) => d.id !== insumoEditandoId)) {
-      error.textContent = "Ya existe un insumo con ese SKU.";
+    const todosLosInsumosSku = await getDocs(collection(db, "insumos"));
+    const skuDuplicado = todosLosInsumosSku.docs.some((d) =>
+      d.id !== insumoEditandoId && normalizarSku(d.data().sku) === normalizarSku(datos.sku)
+    );
+    if (skuDuplicado) {
+      actualizarAvisoSkuDuplicado();
+      error.textContent = "Ya existe un insumo con ese SKU. Elegí uno diferente.";
       return;
     }
     if (!insumoEditandoId) {
       // Consultar Firestore al momento de guardar evita depender solo del estado local.
-      const todosLosInsumos = await getDocs(collection(db, "insumos"));
-      const mismoNombre = todosLosInsumos.docs
+      const mismoNombre = todosLosInsumosSku.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter((i) => normalizarNombre(i.nombre) === normalizarNombre(datos.nombre));
       if (mismoNombre.length) {

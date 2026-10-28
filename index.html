@@ -133,7 +133,8 @@
       <p id="insumo-duplicado-aviso" class="aviso" role="status" hidden></p>
       <label>Categoría <select id="f-categoria" required></select></label>
       <label>Marca <input id="f-marca" required maxlength="60"></label>
-      <label>SKU <input id="f-sku" required maxlength="60"></label>
+      <label>SKU <input id="f-sku" required maxlength="60" autocomplete="off" aria-describedby="sku-duplicado-aviso"></label>
+      <p id="sku-duplicado-aviso" class="aviso" role="alert" hidden></p>
       <div class="fila">
         <label>Precio (ARS) <input id="f-precio" type="number" min="0" step="1" required></label>
         <label>Stock inicial <input id="f-stock" type="number" min="0" step="1" required></label>
