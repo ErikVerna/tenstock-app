@@ -63,15 +63,24 @@
       <section id="panel-insumos" class="panel">
         <div class="herramientas">
           <input id="buscar" type="search" placeholder="Buscar por nombre, marca o SKU">
-          <select id="filtro-categoria"><option value="">Todas las categorías</option></select>
+          <select id="filtro-categoria" aria-label="Filtrar por categoría"><option value="">Todas las categorías</option></select>
+          <label class="check" id="wrap-sin-stock"><input id="ver-sin-stock" type="checkbox"> Sin stock (0)</label>
           <label class="check" id="wrap-ver-bajas" hidden><input id="ver-bajas" type="checkbox"> Ver dados de baja</label>
-          <button id="btn-nuevo-insumo" class="btn btn-primario" hidden>Agregar insumo</button>
+          <button id="btn-nuevo-insumo" class="btn btn-primario" title="Agregar un nuevo insumo" aria-label="Agregar un nuevo insumo" hidden>+</button>
         </div>
         <p id="msg-insumos" class="aviso" role="status"></p>
         <div class="tabla-wrap">
           <table>
             <thead>
-              <tr><th>Nombre</th><th>Categoría</th><th>Marca</th><th>SKU</th><th class="num">Precio</th><th class="num">Stock</th><th>Acciones</th></tr>
+              <tr>
+                <th><button class="th-orden" data-orden="nombre" type="button">Nombre <span></span></button></th>
+                <th><button class="th-orden" data-orden="categoria" type="button">Categoría <span></span></button></th>
+                <th><button class="th-orden" data-orden="marca" type="button">Marca <span></span></button></th>
+                <th><button class="th-orden" data-orden="sku" type="button">SKU <span></span></button></th>
+                <th class="num"><button class="th-orden" data-orden="precio" type="button">Precio <span></span></button></th>
+                <th class="num"><button class="th-orden" data-orden="stock" type="button">Stock <span></span></button></th>
+                <th>Acciones</th>
+              </tr>
             </thead>
             <tbody id="tbody-insumos"></tbody>
           </table>
@@ -80,10 +89,17 @@
 
       <!-- MOVIMIENTOS (solo admin) -->
       <section id="panel-movimientos" class="panel" hidden>
-        <div class="herramientas">
+        <div class="herramientas filtros-movimientos">
           <h2>Historial de movimientos</h2>
-          <label>Filtrar por día <input id="filtro-movimientos-dia" type="date"></label>
-          <button id="limpiar-filtro-movimientos" type="button" class="btn btn-texto">Ver todos</button>
+          <label>Tipo de insumo
+            <select id="filtro-movimientos-categoria"><option value="">Todas las categorías</option></select>
+          </label>
+          <label>Usuario
+            <select id="filtro-movimientos-usuario"><option value="">Todos los usuarios</option></select>
+          </label>
+          <label>Desde <input id="filtro-movimientos-desde" type="date"></label>
+          <label>Hasta <input id="filtro-movimientos-hasta" type="date"></label>
+          <button id="limpiar-filtro-movimientos" type="button" class="btn btn-texto">↺ Limpiar filtros</button>
         </div>
         <div class="tabla-wrap">
           <table>
@@ -97,7 +113,7 @@
       <section id="panel-usuarios" class="panel" hidden>
         <div class="herramientas">
           <h2>Usuarios del sistema</h2>
-          <button id="btn-nuevo-usuario" class="btn btn-primario">Agregar usuario</button>
+          <button id="btn-nuevo-usuario" class="btn btn-primario" title="Agregar un nuevo usuario" aria-label="Agregar un nuevo usuario">+</button>
         </div>
         <div class="tabla-wrap">
           <table>
@@ -117,7 +133,8 @@
       <p id="insumo-duplicado-aviso" class="aviso" role="status" hidden></p>
       <label>Categoría <select id="f-categoria" required></select></label>
       <label>Marca <input id="f-marca" required maxlength="60"></label>
-      <label>SKU <input id="f-sku" required maxlength="60"></label>
+      <label>SKU <input id="f-sku" required maxlength="60" autocomplete="off" aria-describedby="sku-duplicado-aviso"></label>
+      <p id="sku-duplicado-aviso" class="aviso" role="alert" hidden></p>
       <div class="fila">
         <label>Precio (ARS) <input id="f-precio" type="number" min="0" step="1" required></label>
         <label>Stock inicial <input id="f-stock" type="number" min="0" step="1" required></label>
@@ -196,7 +213,7 @@
       <p id="baja-error" class="error" role="alert"></p>
       <div class="acciones-dlg">
         <button type="button" class="btn btn-texto" data-cerrar>Cancelar</button>
-        <button id="baja-submit" type="submit" class="btn btn-primario btn-baja">Registrar baja de stock</button>
+        <button id="baja-submit" type="submit" class="btn btn-primario">Registrar baja de stock</button>
       </div>
     </form>
   </dialog>
@@ -238,5 +255,7 @@
   </dialog>
 
   <script type="module" src="js/app.js"></script>
+  <!-- Datos de demo: js/carga-demo.js ya no se carga solo (mostraba un alert en cada visita).
+       Para cargarlos una vez, ver el README. -->
 </body>
 </html>

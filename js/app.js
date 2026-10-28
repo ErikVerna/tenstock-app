@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc,
-  deleteDoc, onSnapshot, runTransaction, writeBatch, query, where, orderBy, limit, serverTimestamp
+  deleteDoc, onSnapshot, runTransaction, writeBatch, query, orderBy, limit, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -61,6 +61,7 @@ let entradaInsumoId = null;
 let bajaInsumoId = null;
 let movimientos = [];
 let usuarioEditando = null;
+let ordenInsumos = { campo: "nombre", direccion: 1 };
 
 const esAdmin = () => sesion?.rol === "admin";
 const puedeEditarCampo = (campo) => esAdmin() || sesion.permisos.includes(campo);
@@ -161,15 +162,19 @@ function iniciarApp() {
 
   // onSnapshot = tiempo real: si otro empleado vende, la tabla se actualiza sola
   desuscribir.push(onSnapshot(collection(db, "insumos"), (snap) => {
-    insumos = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+    insumos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    actualizarCategoriasMovimientos();
     renderInsumos();
+    actualizarAvisoSkuDuplicado();
+    renderMovimientos();
   }, () => { $("#msg-insumos").textContent = "No se pudieron cargar los insumos."; }));
 
   if (esAdmin()) {
     desuscribir.push(onSnapshot(collection(db, "usuarios"), (snap) => {
       usuarios = snap.docs.map((d) => d.data()).sort((a, b) => a.usuario.localeCompare(b.usuario));
+      actualizarUsuariosMovimientos();
       renderUsuarios();
+      renderMovimientos();
     }));
     desuscribir.push(onSnapshot(
       query(collection(db, "movimientos"), orderBy("fecha", "desc")),
@@ -193,18 +198,44 @@ CATEGORIAS.forEach((c) => {
 });
 $("#buscar").addEventListener("input", renderInsumos);
 $("#filtro-categoria").addEventListener("change", renderInsumos);
-$("#ver-bajas").addEventListener("change", renderInsumos);
+$("#ver-bajas").addEventListener("change", () => {
+  if ($("#ver-bajas").checked) $("#ver-sin-stock").checked = false;
+  renderInsumos();
+});
+$("#ver-sin-stock").addEventListener("change", () => {
+  if ($("#ver-sin-stock").checked) $("#ver-bajas").checked = false;
+  renderInsumos();
+});
+document.querySelectorAll("[data-orden]").forEach((b) => b.addEventListener("click", () => {
+  const campo = b.dataset.orden;
+  if (ordenInsumos.campo === campo) ordenInsumos.direccion *= -1;
+  else ordenInsumos = { campo, direccion: 1 };
+  document.querySelectorAll("[data-orden]").forEach((th) => {
+    th.querySelector("span").textContent = th.dataset.orden === ordenInsumos.campo ? (ordenInsumos.direccion === 1 ? "▲" : "▼") : "";
+  });
+  renderInsumos();
+}));
 
 function renderInsumos() {
   if (!sesion) return;
   const texto = $("#buscar").value.trim().toLowerCase();
   const cat = $("#filtro-categoria").value;
   const verBajas = esAdmin() && $("#ver-bajas").checked;
-  // Si se activa "Ver dados de baja", mostrar únicamente los productos inactivos.
+  const sinStock = $("#ver-sin-stock").checked;
+  // Los filtros de baja y sin stock son excluyentes: cada uno muestra solo ese conjunto.
   const visibles = insumos.filter((i) => verBajas ? !estaActivo(i) : estaActivo(i));
-  const lista = visibles.filter((i) =>
+  let lista = visibles.filter((i) =>
+    (!sinStock || Number(i.stock) === 0) &&
     (!cat || i.categoria === cat) &&
-    (!texto || [i.nombre, i.marca, i.sku].some((v) => v.toLowerCase().includes(texto))));
+    (!texto || [i.nombre, i.marca, i.sku].some((v) => String(v ?? "").toLowerCase().includes(texto))));
+  const campo = ordenInsumos.campo;
+  lista.sort((a, b) => {
+    const av = a[campo] ?? ""; const bv = b[campo] ?? "";
+    const comparacion = ["precio", "stock"].includes(campo)
+      ? (Number(av) || 0) - (Number(bv) || 0)
+      : String(av).localeCompare(String(bv), "es", { numeric: true, sensitivity: "base" });
+    return comparacion * ordenInsumos.direccion;
+  });
 
   const puedeModificar = esAdmin() || sesion.permisos.length > 0;
   $("#tbody-insumos").innerHTML = lista.length ? lista.map((i) => {
@@ -215,7 +246,7 @@ function renderInsumos() {
         <td><small>${esc(i.sku)}</small></td>
         <td class="num">${pesos(i.precio)}</td>
         <td class="num">${i.stock}</td>
-        <td><button class="btn btn-texto" data-accion="reactivar" data-id="${i.id}">Reactivar</button></td></tr>`;
+        <td><button class="btn btn-texto" data-accion="reactivar" data-id="${i.id}" title="Reactivar producto" aria-label="Reactivar ${esc(i.nombre)}">♻️</button></td></tr>`;
     }
     const clase = i.stock === 0 ? "stock-cero" : i.stock <= STOCK_BAJO ? "stock-bajo" : "stock-ok";
     const sinStock = i.stock === 0 ? ` <span class="etiqueta etiqueta-cero">Sin stock</span>` : "";
@@ -225,10 +256,10 @@ function renderInsumos() {
       <td class="num">${pesos(i.precio)}</td>
       <td class="num ${clase}">${sinStock} ${i.stock}</td>
       <td>
-        <button class="btn btn-texto" data-accion="vender" data-id="${i.id}" ${i.stock === 0 ? "disabled" : ""}>Vender</button>
-        <button class="btn btn-texto" data-accion="entrada" data-id="${i.id}">Entrada</button>
-        ${puedeModificar ? `<button class="btn btn-texto" data-accion="editar" data-id="${i.id}">Editar</button>` : ""}
-        ${esAdmin() ? `<button class="btn btn-texto btn-peligro" data-accion="baja" data-id="${i.id}">Dar de baja</button>` : ""}
+        <button class="btn btn-texto btn-icono btn-vender" data-accion="vender" data-id="${i.id}" title="Registrar venta" aria-label="Vender ${esc(i.nombre)}" ${i.stock === 0 ? "disabled" : ""}>🛒</button>
+        <button class="btn btn-texto btn-icono btn-stock" data-accion="entrada" data-id="${i.id}" title="Agregar stock" aria-label="Agregar stock a ${esc(i.nombre)}">📥</button>
+        ${puedeModificar ? `<button class="btn btn-texto btn-icono btn-editar" data-accion="editar" data-id="${i.id}" title="Editar insumo" aria-label="Editar ${esc(i.nombre)}">✏️</button>` : ""}
+        ${esAdmin() ? `<button class="btn btn-texto btn-icono btn-baja" data-accion="baja" data-id="${i.id}" title="Dar de baja" aria-label="Dar de baja ${esc(i.nombre)}">🗑️</button>` : ""}
       </td></tr>`;
   }).join("") : `<tr><td colspan="7" class="vacio">No hay insumos que coincidan con la búsqueda.</td></tr>`;
   $("#msg-insumos").textContent = `${lista.length} de ${visibles.length} insumos`;
@@ -252,6 +283,24 @@ $("#btn-nuevo-insumo").addEventListener("click", () => abrirInsumo(null));
 function normalizarNombre(nombre) {
   return String(nombre ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
 }
+
+function normalizarSku(sku) {
+  return String(sku ?? "").trim().toLocaleUpperCase("es");
+}
+
+function actualizarAvisoSkuDuplicado() {
+  const aviso = $("#sku-duplicado-aviso");
+  const sku = normalizarSku($("#f-sku").value);
+  const existentes = sku
+    ? insumos.filter((i) => i.id !== insumoEditandoId && normalizarSku(i.sku) === sku)
+    : [];
+  aviso.hidden = existentes.length === 0;
+  aviso.textContent = existentes.length
+    ? `⚠️ Este SKU ya está registrado en: ${existentes.map((i) => `${i.nombre} (SKU: ${i.sku})`).join("; ")}. Elegí un SKU diferente.`
+    : "";
+}
+
+$("#f-sku").addEventListener("input", actualizarAvisoSkuDuplicado);
 
 function actualizarAvisoNombreDuplicado() {
   const aviso = $("#insumo-duplicado-aviso");
@@ -285,6 +334,7 @@ function abrirInsumo(insumo) {
     ? "El stock no se edita acá: usá Vender o Entrada para que quede registrado."
     : "Se registra como movimiento de alta. Si después llega más mercadería, usá Entrada.";
   actualizarAvisoNombreDuplicado();
+  actualizarAvisoSkuDuplicado();
   $("#dlg-insumo").showModal();
 }
 
@@ -307,15 +357,18 @@ $("#form-insumo").addEventListener("submit", async (e) => {
   }
 
   try {
-    const repetido = await getDocs(query(collection(db, "insumos"), where("sku", "==", datos.sku)));
-    if (repetido.docs.some((d) => d.id !== insumoEditandoId)) {
-      error.textContent = "Ya existe un insumo con ese SKU.";
+    const todosLosInsumosSku = await getDocs(collection(db, "insumos"));
+    const skuDuplicado = todosLosInsumosSku.docs.some((d) =>
+      d.id !== insumoEditandoId && normalizarSku(d.data().sku) === normalizarSku(datos.sku)
+    );
+    if (skuDuplicado) {
+      actualizarAvisoSkuDuplicado();
+      error.textContent = "Ya existe un insumo con ese SKU. Elegí uno diferente.";
       return;
     }
     if (!insumoEditandoId) {
       // Consultar Firestore al momento de guardar evita depender solo del estado local.
-      const todosLosInsumos = await getDocs(collection(db, "insumos"));
-      const mismoNombre = todosLosInsumos.docs
+      const mismoNombre = todosLosInsumosSku.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter((i) => normalizarNombre(i.nombre) === normalizarNombre(datos.nombre));
       if (mismoNombre.length) {
@@ -571,16 +624,43 @@ async function reactivar(insumo) {
 }
 
 /* ================= MOVIMIENTOS: historial (solo administrador) ================= */
+function actualizarCategoriasMovimientos() {
+  const select = $("#filtro-movimientos-categoria");
+  if (!select) return;
+  const valor = select.value;
+  const categorias = [...new Set(insumos.map((i) => i.categoria).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+  select.innerHTML = '<option value="">Todas las categorías</option>' + categorias.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  select.value = categorias.includes(valor) ? valor : "";
+}
+function actualizarUsuariosMovimientos() {
+  const select = $("#filtro-movimientos-usuario");
+  if (!select) return;
+  const valor = select.value;
+  select.innerHTML = '<option value="">Todos los usuarios</option>' + usuarios.map((u) => `<option value="${esc(u.usuario)}">${esc(u.usuario)}</option>`).join("");
+  select.value = usuarios.some((u) => u.usuario === valor) ? valor : "";
+}
 function renderMovimientos() {
-  const dia = $("#filtro-movimientos-dia").value;
+  const categoria = $("#filtro-movimientos-categoria").value;
+  const usuario = $("#filtro-movimientos-usuario").value;
+  const desde = $("#filtro-movimientos-desde").value;
+  const hasta = $("#filtro-movimientos-hasta").value;
   const lista = movimientos.filter((m) => {
-    if (!dia) return true;
+    if (usuario && m.usuario !== usuario) return false;
+    if (categoria) {
+      const insumo = insumos.find((i) => i.id === m.insumoId);
+      if (!insumo || insumo.categoria !== categoria) return false;
+    }
     const fecha = m.fecha?.toDate?.();
-    if (!fecha) return false;
-    const yyyy = fecha.getFullYear();
-    const mm = String(fecha.getMonth() + 1).padStart(2, "0");
-    const dd = String(fecha.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}` === dia;
+    if ((desde || hasta) && !fecha) return false;
+    if (desde) {
+      const inicio = new Date(`${desde}T00:00:00`);
+      if (fecha < inicio) return false;
+    }
+    if (hasta) {
+      const fin = new Date(`${hasta}T23:59:59.999`);
+      if (fecha > fin) return false;
+    }
+    return true;
   });
   $("#tbody-movimientos").innerHTML = lista.length ? lista.map((m) => {
     const fecha = m.fecha?.toDate?.().toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) ?? "—";
@@ -602,10 +682,16 @@ function renderMovimientos() {
       <td class="num">${m.stockResultante}</td>
       <td>${esc(m.usuario)}</td>
       <td>${m.detalle ? `<small class="movimiento-detalle" title="${esc(m.detalle)}">${esc(m.detalle)}</small>` : "—"}</td></tr>`;
-  }).join("") : `<tr><td colspan="7" class="vacio">No hay movimientos para la fecha seleccionada.</td></tr>`;
+  }).join("") : `<tr><td colspan="7" class="vacio">No hay movimientos para los filtros seleccionados.</td></tr>`;
 }
-$("#filtro-movimientos-dia").addEventListener("change", renderMovimientos);
-$("#limpiar-filtro-movimientos").addEventListener("click", () => { $("#filtro-movimientos-dia").value = ""; renderMovimientos(); });
+["#filtro-movimientos-categoria", "#filtro-movimientos-usuario", "#filtro-movimientos-desde", "#filtro-movimientos-hasta"].forEach((id) => $(id).addEventListener("change", renderMovimientos));
+$("#limpiar-filtro-movimientos").addEventListener("click", () => {
+  $("#filtro-movimientos-categoria").value = "";
+  $("#filtro-movimientos-usuario").value = "";
+  $("#filtro-movimientos-desde").value = "";
+  $("#filtro-movimientos-hasta").value = "";
+  renderMovimientos();
+});
 
 /* ================= USUARIOS (solo administrador) ================= */
 function renderUsuarios() {
@@ -615,11 +701,10 @@ function renderUsuarios() {
     <td>${u.rol === "admin" ? "Todos" : esc(soloEditables(u.permisos).join(", ") || "Ninguno (consulta, ventas y entradas)")}</td>
     <td>${u.activo ? "Activo" : "Inactivo"}</td>
     <td>
-      <button class="btn btn-texto" data-accion="editar" data-id="${esc(u.usuario)}">Editar</button>
-      ${u.usuario !== sesion.usuario ? `<button class="btn btn-texto btn-peligro" data-accion="borrar" data-id="${esc(u.usuario)}">Eliminar</button>` : ""}
+      <button class="btn btn-texto btn-icono btn-editar" data-accion="editar" data-id="${esc(u.usuario)}">✏️</button>
+      ${u.usuario !== sesion.usuario ? `<button class="btn btn-texto btn-icono btn-baja" data-accion="borrar" data-id="${esc(u.usuario)}">❌</button>` : ""}
     </td></tr>`).join("");
 }
-
 $("#tbody-usuarios").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-accion]");
   if (!b) return;

@@ -19,7 +19,7 @@
     --suave: #9aa7b2;
     --acento: #4e4ec6;
     --acento-osc: #5e7fa0;
-    --alerta: #b4b10a; /*b4b10a*/
+    --alerta: #b4b10a;
     --peligro: #f0766e;
   }
 }
@@ -430,4 +430,150 @@ dialog {
   border-radius: 50%;
   background: #dcfce7; color: #16803d;
   font-size: 2.4rem; font-weight: 700;
+}
+
+/* Ordenamiento de columnas y acciones compactas */
+.th-orden { font: inherit; color: inherit; border: 0; padding: 0; background: transparent; cursor: pointer; font-weight: 700; white-space: nowrap; }
+.th-orden:hover { color: var(--acento); }
+.th-orden span { font-size: .75em; margin-left: 3px; }
+.btn-icono { min-width: 36px; padding: 6px 7px; font-size: 1.05rem; text-decoration: none; }
+.btn-icono:hover { background: var(--papel); text-decoration: none; }
+.filtros-movimientos label { min-width: 145px; }
+@media (max-width: 700px) { .filtros-movimientos label { flex: 1 1 42%; } }
+
+
+/* ===== Botones de acciones de productos ===== */
+
+.btn-accion {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.2s ease,
+                transform 0.2s ease,
+                box-shadow 0.2s ease;
+}
+
+.btn-accion:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.10);
+}
+
+.btn-accion:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+.btn-accion:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Vender: verde */
+.btn-vender {
+    border-color: #BBF7D0;
+}
+
+.btn-vender:hover {
+    background-color: #BBF7D0;
+}
+
+/* Agregar stock: azul */
+.btn-stock {
+    border-color: #BFDBFE;
+}
+
+.btn-stock:hover {
+    background-color: #BFDBFE;
+}
+
+/* Editar: amarillo */
+.btn-editar {
+    border-color: #FDE68A;
+}
+
+.btn-editar:hover {
+    background-color: #FDE68A;
+}
+
+/* Dar de baja: rojo */
+.btn-baja {
+    border-color: #FECACA;
+}
+
+.btn-baja:hover {
+    background-color: #FECACA;
+}
+
+/* Reactivar: violeta */
+.btn-reactivar {
+    background-color: #F3E8FF;
+    color: #7E22CE;
+    border-color: #E9D5FF;
+}
+
+.btn-reactivar:hover {
+    background-color: #E9D5FF;
+}
+
+/* Consultar: gris */
+.btn-consultar {
+    background-color: #E5E7EB;
+    color: #374151;
+    border-color: #D1D5DB;
+}
+
+.btn-consultar:hover {
+    background-color: #D1D5DB;
+}
+
+/* Adaptación al modo oscuro */
+.dark .btn-vender,
+[data-theme="dark"] .btn-vender {
+    background-color: #14532D;
+    color: #BBF7D0;
+    border-color: #166534;
+}
+
+.dark .btn-stock,
+[data-theme="dark"] .btn-stock {
+    background-color: #1E3A8A;
+    color: #BFDBFE;
+    border-color: #1D4ED8;
+}
+
+.dark .btn-editar,
+[data-theme="dark"] .btn-editar {
+    background-color: #78350F;
+    color: #FEF3C7;
+    border-color: #92400E;
+}
+
+.dark .btn-baja,
+[data-theme="dark"] .btn-baja {
+    background-color: #7F1D1D;
+    color: #FECACA;
+    border-color: #991B1B;
+}
+
+.dark .btn-reactivar,
+[data-theme="dark"] .btn-reactivar {
+    background-color: #581C87;
+    color: #E9D5FF;
+    border-color: #7E22CE;
+}
+
+.dark .btn-consultar,
+[data-theme="dark"] .btn-consultar {
+    background-color: #374151;
+    color: #F3F4F6;
+    border-color: #4B5563;
 }
