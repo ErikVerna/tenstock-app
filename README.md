@@ -4,7 +4,42 @@ Sistema web para administrar el stock de insumos tecnológicos de **TecnoNova**.
 
 El objetivo es tener la información de los productos centralizada y mantener un registro de los cambios de stock, evitando depender de planillas separadas o anotaciones en papel.
 
+## Login
+
+<img width="1437" height="610" alt="Screen Shot 2026-10-28 at 18 10 49" src="https://github.com/user-attachments/assets/d5125eaa-95c2-4e78-b3a0-fd565d3fe183" />
+
+## Insumos
+
+<img width="1408" height="765" alt="Screen Shot 2026-10-28 at 18 15 09" src="https://github.com/user-attachments/assets/169a65b5-8602-49b7-8b11-7c7413510c00" />
+
+## Movimientos
+
+<img width="1406" height="767" alt="Screen Shot 2026-10-28 at 18 16 35" src="https://github.com/user-attachments/assets/7c3955c9-67ba-44ce-9ce5-690c1b5e7fc3" />
+
+## Usuarios
+
+<img width="1437" height="657" alt="Screen Shot 2026-10-28 at 18 17 08" src="https://github.com/user-attachments/assets/8fc844d1-4431-4509-a96c-d8d9a48490df" /> 
+
+## Registro de Ventas
+
+<img width="646" height="496" alt="Screen Shot 2026-10-28 at 18 19 59" src="https://github.com/user-attachments/assets/a4780466-6f01-4e5a-82a7-3f859472a5b2" />
+
+<img width="779" height="399" alt="Screen Shot 2026-10-28 at 18 20 42" src="https://github.com/user-attachments/assets/00899012-f15c-40fc-a2ea-a9dc09056a22" />
+
+## Reposición
+
+<img width="761" height="575" alt="Screen Shot 2026-10-28 at 18 31 49" src="https://github.com/user-attachments/assets/3e91b827-1372-4c1f-b990-5c0f07927d23" />
+
+## Devolución
+
+<img width="552" height="536" alt="Screen Shot 2026-10-28 at 18 32 57" src="https://github.com/user-attachments/assets/07bc83b2-af9c-4c56-9858-6053cfb72010" />
+
+##
+
+
+
 ## Funcionalidades principales
+
 
 - **Gestión de insumos:** alta, consulta, búsqueda, edición y baja lógica de productos.
 - **Control de stock:** registro de ventas, reposiciones y devoluciones.
